@@ -13,41 +13,49 @@ It runs entirely on AWS (Amazon Bedrock, S3, DynamoDB, SQS, Lambda, AgentCore). 
 
 ## Quick start: deploy it into your own AWS account
 
-You need Python 3.12, Terraform, the AWS CLI, and an AWS account with Amazon Bedrock model access in **us-east-1** (Claude Sonnet 5.5, Claude Haiku 5.5, Titan Text Embeddings V2). Do **not** change the region; the models are set up for `us-east-1`. Commands are PowerShell, run from the repo root.
+You need Python 3.12, Terraform, the AWS CLI, and an AWS account with Amazon Bedrock model access in **us-east-1** (Claude Sonnet 5.5, Claude Haiku 5.5, Titan Text Embeddings V2). Do **not** change the region; the models are set up for `us-east-1`. Run all commands from the repo root, in a terminal on Windows (PowerShell), macOS or Linux. They are identical on every system except for how you set your AWS profile (step A). On macOS/Linux, use `python3` and `pip3` in place of `python` and `pip` if those are the names on your machine.
 
-### Step A: edit these values first (before running anything)
+### Step A: set your AWS profile, and edit these values (before running anything)
 
-Find your AWS account id (12 digits) with:
+**Choose your AWS profile once per terminal window.** Every script, Terraform and the chat page all use it automatically (no profile name is written in the code). If you only have a default profile you can skip this.
 
-```powershell
-aws sts get-caller-identity --profile YOUR_PROFILE --query Account --output text
 ```
+# Windows PowerShell
+$env:AWS_PROFILE = "YOUR_PROFILE_NAME"
+```
+
+```bash
+# macOS / Linux
+export AWS_PROFILE=YOUR_PROFILE_NAME
+```
+
+Use the same terminal window for all the commands below (if you open a new window, set it again). To check it works, run `aws sts get-caller-identity`; it should show your AWS account.
+
+Then edit these values:
 
 | # | File | Line to change | Put |
 |---|---|---|---|
-| 1 | `terraform/main.tf` | `profile = "builder"` | your AWS profile name |
-| 2 | `terraform/main.tf` | `source_bucket = "wri-bucket-6157-5871-0841"` | the S3 bucket that holds your PDFs |
-| 3 | `lambdas/sections_handler.py` | `SOURCE_BUCKET = "wri-bucket-6157-5871-0841"` | the same PDF bucket |
-| 4 | `ingest/common.py` | `SOURCE_BUCKET = ...` and `PROFILE = "builder"` | the same PDF bucket, and your profile name |
-| 5 | `app/streamlit_app.py` | `profile_name="builder"` | your profile name |
-| 6 | `docs_to_ingest.txt` | the list of keys | the PDFs you want to ingest, one S3 key per line (e.g. `2024_publications/some-file.pdf`) |
+| 1 | `terraform/main.tf` | `source_bucket = "wri-bucket-6157-5871-0841"` | the S3 bucket that holds your PDFs |
+| 2 | `lambdas/sections_handler.py` | `SOURCE_BUCKET = "wri-bucket-6157-5871-0841"` | the same PDF bucket |
+| 3 | `ingest/common.py` | `SOURCE_BUCKET = "wri-bucket-6157-5871-0841"` | the same PDF bucket |
+| 4 | `docs_to_ingest.txt` | the list of keys | the PDFs you want to ingest, one S3 key per line (e.g. `2024_publications/some-file.pdf`) |
 
-> **Careful with step A6:** if `docs_to_ingest.txt` has no keys, **every PDF in the bucket is ingested** (it could be hundreds).
+> **Careful with step A4:** if `docs_to_ingest.txt` has no keys, **every PDF in the bucket is ingested** (it could be hundreds).
 
 ### Step B: run these commands in order
 
 **1. Install the Python packages**
-```powershell
+```
 pip install -r requirements.txt
 ```
 
 **2. Package the agent.** This builds `agent/agent_code.zip` (the agent code plus its libraries, for AgentCore's Linux machines). Terraform uploads it in the next step.
-```powershell
+```
 python agent/build_zip.py
 ```
 
 **3. Create everything in AWS**: the tables, vector index, buckets, queues, Lambdas and the AgentCore agent. Type `yes` when asked. It takes a few minutes.
-```powershell
+```
 cd terraform
 terraform init
 terraform apply
@@ -55,12 +63,12 @@ cd ..
 ```
 
 **4. Ingest your PDFs.** This only queues them; the Lambdas then work in the background (about 20 to 40 seconds per PDF, plus about a minute for embedding).
-```powershell
+```
 python ingest/1_start_ingestion.py
 ```
 
 **5. Open the chat page.** It finds your agent by its name (`askwri_agent`), so there is nothing to copy.
-```powershell
+```
 streamlit run app/streamlit_app.py
 ```
 Go to http://localhost:8501. Try the example questions further down. (`terraform output agent_runtime_arn` shows the agent's ARN if you ever need it.)
@@ -144,11 +152,9 @@ You need:
 
 - **Python 3.12** and `pip`
 - **Terraform** (1.5 or newer)
-- An **AWS account** with permission to create the resources above, and an AWS CLI profile (the code uses the name `builder`; change it in step A if yours is different, e.g. create it with `aws configure --profile builder`). The region used everywhere is **`us-east-1`**.
+- An **AWS account** with permission to create the resources above, and an AWS CLI profile with credentials (set up with `aws configure --profile YOUR_PROFILE_NAME`). The region used everywhere is **`us-east-1`**.
 - **Amazon Bedrock model access** in `us-east-1` for: Claude Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`), Claude Haiku 5.5 (`us.anthropic.claude-haiku-5-5`) and Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`).
 - The PDFs in an S3 bucket your profile can read (the original project used `wri-bucket-6157-5871-0841`, folder `2024_publications/`). Each PDF must be under 4.5 MB.
-
-Commands below are for **PowerShell** on Windows.
 
 ---
 
@@ -182,8 +188,7 @@ Each PDF must be small enough to send to the model in one piece (under 4.5 MB).
 ### Running the agent on your own computer (optional)
 Instead of the hosted agent, you can run it locally. Terminal 1:
 
-```powershell
-$env:AWS_PROFILE="YOUR_PROFILE"
+```
 python agent/agent.py
 ```
 
@@ -219,7 +224,7 @@ Edit the lists in [lambdas/labels.py](lambdas/labels.py) and copy the **identica
 
 ## Tearing it down
 
-```powershell
+```
 cd terraform
 terraform destroy          # type "yes"; removes everything, including the stored documents and vectors
 ```

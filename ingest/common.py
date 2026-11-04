@@ -10,13 +10,14 @@ from botocore.config import Config
 SOURCE_BUCKET = "wri-bucket-6157-5871-0841"
 PDF_QUEUE = "askwri-pdf-queue"
 REGION = "us-east-1"
-PROFILE = "builder"
 
 # Path to the list of PDFs, one folder above this file
 DOCS_FILE = os.path.join(os.path.dirname(__file__), "..", "docs_to_ingest.txt")
 
 # ---- AWS session and clients ----
-session = boto3.Session(profile_name=PROFILE, region_name=REGION)
+# No profile is named here: boto3 uses the profile in your AWS_PROFILE environment variable
+# (or your default profile).
+session = boto3.Session(region_name=REGION)
 BOTO_CONFIG = Config(read_timeout=600, retries={"max_attempts": 10, "mode": "adaptive"})
 
 s3 = session.client("s3", config=BOTO_CONFIG)

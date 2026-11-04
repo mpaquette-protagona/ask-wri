@@ -11,7 +11,9 @@ import streamlit as st
 AGENT_NAME = "askwri_agent"  # the agent's name in Terraform (agent.tf); we look up its ARN by name
 USE_LOCAL_AGENT = False      # True = talk to `python agent/agent.py` running on this computer
 LOCAL_URL = "http://localhost:8080/invocations"
-session = boto3.Session(profile_name="builder", region_name="us-east-1")
+# No profile is named here: boto3 uses the profile in your AWS_PROFILE environment variable
+# (or your default profile).
+session = boto3.Session(region_name="us-east-1")
 
 
 @st.cache_resource

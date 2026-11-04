@@ -6,9 +6,10 @@ terraform {
   }
 }
 
+# No profile is named here: Terraform uses the profile in your AWS_PROFILE environment variable
+# (or your default profile).
 provider "aws" {
-  region  = "us-east-1"
-  profile = "builder"
+  region = "us-east-1"
 }
 
 locals {

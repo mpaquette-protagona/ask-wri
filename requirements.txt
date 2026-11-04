@@ -1,5 +1,5 @@
 boto3
 requests
-streamlit
+streamlit[pdf]>=1.54
 strands-agents
 bedrock-agentcore

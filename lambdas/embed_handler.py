@@ -68,6 +68,8 @@ def handler(event, context):
                     "year": str(doc["year"]), "resource_type": "research",
                     "chunk_text": chunk, "title": doc.get("title", ""),
                     "source_url": doc.get("source_url", "")}
+        if doc.get("language"):
+            metadata["language"] = doc["language"]
         if doc.get("regions"):
             metadata["regions"] = list(doc["regions"])
         if doc.get("topics"):

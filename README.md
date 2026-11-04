@@ -119,6 +119,11 @@ CHAT
 |---|---|
 | `search_wri` | Finds the most relevant sections. Give a text query (semantic search) and/or filters: `region`, `topic`, `tag`, or `document` (a document id). Returns up to 5 sections per call. |
 | `list_documents` | Lists the documents in the library (id, title, year, regions, topics, tags), optionally filtered by tag, region or topic. Used by the gaps agent to see what exists. |
+| `show_coverage_dashboard` | Gaps agent only, and only for questions about the library as a whole (or when asked for a dashboard). Draws how many documents are loaded by topic, region and year, counted from the library's metadata by code, so the numbers are exact. Zeros show gaps. It shows at most once per question. |
+| `show_chart` | Draws a bar, horizontal bar, line or pie chart under an answer, only when it helps (a trend, comparison or ranking with three or more numbers, or when you ask for a chart; never for a single number or a simple fact). The agent may only chart numbers that appear in the documents it read, and must say which sources they come from. |
+| `suggest_followups` | Offers 2 to 3 next questions as buttons under the answer. |
+
+The three display tools don't draw anything themselves. They record what to show, and the chat page draws it (with Streamlit's built-in charts) next to the answer.
 
 Limits per question: each sub-agent can search at most 5 times, a section is never given to the agent twice, and citation numbers are unique. The allowed values for `region`, `topic` and `tag` are built into the tool definitions, so the agent can't invent one.
 
@@ -146,6 +151,8 @@ agent/
   requirements.txt        packages the deployed agent needs
 app/
   streamlit_app.py        the chat page
+.streamlit/
+  config.toml             the page's colours and settings
 ```
 
 ---
@@ -207,9 +214,15 @@ It serves on `http://localhost:8080`. Terminal 2: set `USE_LOCAL_AGENT = True` a
 - *"Where are the gaps in WRI's research on energy efficiency?"* (the gaps agent, with "Suggestion:" lines)
 - *"What is WRI's position on cryptocurrency?"* (not in the documents, so it answers: "I couldn't find this in the WRI documents I have access to.")
 
+**Using the page:** type a question, or click one of the three examples on the empty chat. To get a briefing or a gaps analysis, just ask for one ("write a briefing on…", "where are the gaps in…"); name a region or topic in the question to focus on it. Under each answer, a "Sources" list shows the documents and sections the answer was built from. Click one to open the original PDF in a pane on the right (scroll it like any PDF; "Open in a new tab at page N" jumps to the section's page). If an answer comes from only one document, a "Single source" note says so. Gaps answers about the whole library start with a dashboard of what it covers, and an answer can include a chart of numbers quoted in the documents. The agent also suggests a few follow-up questions as buttons.
+
+**Language selector:** when the library holds documents in more than one language, a "Search documents in" dropdown appears. Pick a language and every agent only searches, lists and counts documents written in that language (it is applied in code, not left to the model). Answers are always in English, and the PDF you open is the original in its own language. Each document's language is chosen by the model during ingestion from a fixed list in `lambdas/labels.py`.
+
+PDFs open from temporary links that the agent creates (its role is allowed to read the PDF bucket, set up in Terraform), so the person using the page needs no access to that bucket. A link works for up to an hour. If you open a source from an older answer, or a link has stopped working, the page quietly asks the agent for a fresh one (a quick request that doesn't re-answer the question). Anyone who has a link can read that PDF until it expires.
+
 ---
 
-## Changing the tags, regions or topics
+## Changing the tags, regions, topics or languages
 
 Edit the lists in [lambdas/labels.py](lambdas/labels.py) and copy the **identical** file to [agent/labels.py](agent/labels.py). Then run `python agent/build_zip.py` and `terraform apply` (this updates both the Lambda and the agent), and re-ingest the documents so they get the new labels.
 

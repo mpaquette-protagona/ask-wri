@@ -18,3 +18,6 @@ agent/.bedrock_agentcore.yaml
 __pycache__/
 *.pyc
 .venv/
+
+# Reference project kept here for ideas only: it has its own git history and may hold credentials
+foodheads-genbi/

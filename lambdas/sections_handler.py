@@ -140,8 +140,10 @@ def handler(event, context):
     #    (the document row is replaced in step 5; a human-written source_url is kept)
     old_row = docs_table.get_item(Key={"doc_id": doc_id}).get("Item")
     source_url = ""
+    kept = {}  # fields added after ingestion (ingest/2_backfill_metadata.py); keep them on re-ingest
     if old_row:
         source_url = old_row.get("source_url", "")
+        kept = {k: old_row[k] for k in ("subtype", "subtype_label", "pages_total") if k in old_row}
         print(f"{doc_id}: re-ingesting, deleted {delete_old_vectors(doc_id)} old vectors")
 
     # 3. Delete old section files for this document, so re-runs leave nothing stale
@@ -173,7 +175,7 @@ def handler(event, context):
         "resource_type": "research", "source_url": source_url,
         "title": data.get("document_title") or s3_key.split("/")[-1],
         "original_language": language,
-        "tags": tags, "regions": regions, "topics": topics, "sections": section_list})
+        "tags": tags, "regions": regions, "topics": topics, "sections": section_list, **kept})
 
     # 6. Queue one message per section so the embed Lambda picks them up
     for section_id in section_ids:

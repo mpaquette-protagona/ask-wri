@@ -1,5 +1,5 @@
 boto3
 requests
-streamlit
+streamlit>=1.50
 strands-agents
 bedrock-agentcore

@@ -32,8 +32,6 @@ aws sts get-caller-identity --profile YOUR_PROFILE --query Account --output text
 | 5 | `app/streamlit_app.py` | `profile_name="builder"` | your profile name |
 | 6 | `docs_to_ingest.txt` | the list of keys | the PDFs you want to ingest, one S3 key per line (e.g. `2024_publications/some-file.pdf`) |
 
-One more value you only learn later, in step 5 below: `AGENT_ARN` in `app/streamlit_app.py`.
-
 > **Careful with step A6:** if `docs_to_ingest.txt` has no keys, **every PDF in the bucket is ingested** (it could be hundreds).
 
 ### Step B: run these commands in order
@@ -61,19 +59,11 @@ cd ..
 python ingest/1_start_ingestion.py
 ```
 
-**5. Point the chat page at your agent.** Print the agent's ARN:
-```powershell
-cd terraform
-terraform output -raw agent_runtime_arn
-cd ..
-```
-Paste the result into `AGENT_ARN = "..."` in `app/streamlit_app.py`.
-
-**6. Open the chat page**
+**5. Open the chat page.** It finds your agent by its name (`askwri_agent`), so there is nothing to copy.
 ```powershell
 streamlit run app/streamlit_app.py
 ```
-Go to http://localhost:8501. Try the example questions further down.
+Go to http://localhost:8501. Try the example questions further down. (`terraform output agent_runtime_arn` shows the agent's ARN if you ever need it.)
 
 **After you change `agent/agent.py` or `agent/labels.py`:** run `python agent/build_zip.py` and then `terraform apply` again (from `terraform/`). Terraform uploads the new zip and updates the agent.
 
@@ -197,7 +187,7 @@ $env:AWS_PROFILE="YOUR_PROFILE"
 python agent/agent.py
 ```
 
-It serves on `http://localhost:8080`. Terminal 2: set `AGENT_ARN = ""` at the top of [app/streamlit_app.py](app/streamlit_app.py) so the chat page talks to your local agent, then run `streamlit run app/streamlit_app.py`.
+It serves on `http://localhost:8080`. Terminal 2: set `USE_LOCAL_AGENT = True` at the top of [app/streamlit_app.py](app/streamlit_app.py) so the chat page talks to your local agent, then run `streamlit run app/streamlit_app.py`.
 
 ---
 

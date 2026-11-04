@@ -8,16 +8,29 @@ import boto3
 import requests
 import streamlit as st
 
-AGENT_ARN = "arn:aws:bedrock-agentcore:us-east-1:615758710841:runtime/askwri_agent-jCYQj2FUOI"  # set to "" to use the local agent
+AGENT_NAME = "askwri_agent"  # the agent's name in Terraform (agent.tf); we look up its ARN by name
+USE_LOCAL_AGENT = False      # True = talk to `python agent/agent.py` running on this computer
 LOCAL_URL = "http://localhost:8080/invocations"
+session = boto3.Session(profile_name="builder", region_name="us-east-1")
+
+
+@st.cache_resource
+def find_agent_arn():
+    """Ask AgentCore for the ARN of the agent called AGENT_NAME (so nobody has to copy it by hand)."""
+    control = session.client("bedrock-agentcore-control")
+    for page in control.get_paginator("list_agent_runtimes").paginate():
+        for runtime in page["agentRuntimes"]:
+            if runtime["agentRuntimeName"] == AGENT_NAME:
+                return runtime["agentRuntimeArn"]
+    raise RuntimeError(f"No AgentCore agent named {AGENT_NAME} found. Did terraform apply finish?")
 
 
 def ask_agent(user_text):
     """Send the question to the agent and return its answer text."""
-    if not AGENT_ARN:
+    if USE_LOCAL_AGENT:
         return requests.post(LOCAL_URL, json={"prompt": user_text}, timeout=600).json()["answer"]
-    client = boto3.Session(profile_name="builder", region_name="us-east-1").client("bedrock-agentcore")
-    resp = client.invoke_agent_runtime(agentRuntimeArn=AGENT_ARN,
+    client = session.client("bedrock-agentcore")
+    resp = client.invoke_agent_runtime(agentRuntimeArn=find_agent_arn(),
                                        runtimeSessionId=st.session_state.session_id,
                                        payload=json.dumps({"prompt": user_text}))
     return json.loads(resp["response"].read())["answer"]

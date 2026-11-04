@@ -6,11 +6,12 @@ terraform {
   }
 }
 
-# No profile is named here: Terraform uses the profile in your AWS_PROFILE environment variable
-# (or your default profile).
-provider "aws" {
-  region = "us-east-1"
-}
+# No profile or region is named here: Terraform uses your AWS_PROFILE and your profile's region
+# (or AWS_DEFAULT_REGION). It must be a US region (see the check in storage.tf).
+provider "aws" {}
+
+# The region Terraform is deploying into
+data "aws_region" "current" {}
 
 locals {
   source_bucket   = "wri-bucket-6157-5871-0841"

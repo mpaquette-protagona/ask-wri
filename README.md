@@ -13,21 +13,25 @@ It runs entirely on AWS (Amazon Bedrock, S3, DynamoDB, SQS, Lambda, AgentCore). 
 
 ## Quick start: deploy it into your own AWS account
 
-You need Python 3.12, Terraform, the AWS CLI, and an AWS account with Amazon Bedrock model access in **us-east-1** (Claude Sonnet 5.5, Claude Haiku 5.5, Titan Text Embeddings V2). Do **not** change the region; the models are set up for `us-east-1`. Run all commands from the repo root, in a terminal on Windows (PowerShell), macOS or Linux. They are identical on every system except for how you set your AWS profile (step A). On macOS/Linux, use `python3` and `pip3` in place of `python` and `pip` if those are the names on your machine.
+You need Python 3.12, Terraform, the AWS CLI, and an AWS account with Amazon Bedrock model access in **us-east-1** (Claude Sonnet 5.5, Claude Haiku 5.5, Titan Text Embeddings V2). Use a **US region** (`us-east-1`, `us-east-2` or `us-west-2`): the AI model ids in the code start with `us.`, so other regions don't work, and Terraform refuses to run outside them. Only `us-east-1` has been tested. Run all commands from the repo root, in a terminal on Windows (PowerShell), macOS or Linux. They are identical on every system except for how you set your AWS profile (step A). On macOS/Linux, use `python3` and `pip3` in place of `python` and `pip` if those are the names on your machine.
 
-### Step A: set your AWS profile, and edit these values (before running anything)
+### Step A: set your AWS profile and region, and edit these values (before running anything)
 
-**Choose your AWS profile once per terminal window.** Every script, Terraform and the chat page all use it automatically (no profile name is written in the code). If you only have a default profile you can skip this.
+**Choose your AWS profile and region once per terminal window.** Every script, Terraform, the Lambdas, the agent and the chat page all use them automatically (no profile or region is written in the code). If your default profile already has a US region you can skip this.
 
 ```
 # Windows PowerShell
 $env:AWS_PROFILE = "YOUR_PROFILE_NAME"
+$env:AWS_DEFAULT_REGION = "us-east-1"
 ```
 
 ```bash
 # macOS / Linux
 export AWS_PROFILE=YOUR_PROFILE_NAME
+export AWS_DEFAULT_REGION=us-east-1
 ```
+
+(If your profile already has a US region set, `AWS_DEFAULT_REGION` isn't needed. You can set one with `aws configure --profile YOUR_PROFILE_NAME`.)
 
 Use the same terminal window for all the commands below (if you open a new window, set it again). To check it works, run `aws sts get-caller-identity`; it should show your AWS account.
 
@@ -152,8 +156,8 @@ You need:
 
 - **Python 3.12** and `pip`
 - **Terraform** (1.5 or newer)
-- An **AWS account** with permission to create the resources above, and an AWS CLI profile with credentials (set up with `aws configure --profile YOUR_PROFILE_NAME`). The region used everywhere is **`us-east-1`**.
-- **Amazon Bedrock model access** in `us-east-1` for: Claude Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`), Claude Haiku 5.5 (`us.anthropic.claude-haiku-5-5`) and Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`).
+- An **AWS account** with permission to create the resources above, and an AWS CLI profile with credentials (set up with `aws configure --profile YOUR_PROFILE_NAME`). Its region must be a US region (see the Quick start).
+- **Amazon Bedrock model access** in your region for: Claude Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`), Claude Haiku 5.5 (`us.anthropic.claude-haiku-5-5`) and Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`).
 - The PDFs in an S3 bucket your profile can read (the original project used `wri-bucket-6157-5871-0841`, folder `2024_publications/`). Each PDF must be under 4.5 MB.
 
 ---

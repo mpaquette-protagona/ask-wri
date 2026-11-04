@@ -35,6 +35,15 @@ resource "aws_s3vectors_index" "chunks" {
 resource "aws_s3_bucket" "sections" {
   bucket        = local.sections_bucket
   force_destroy = true # lets "terraform destroy" delete it even when it holds files
+
+  # The AI model ids in the code start with "us." so they only work in US regions.
+  # Stop early, with a clear message, if the region is anything else.
+  lifecycle {
+    precondition {
+      condition     = contains(["us-east-1", "us-east-2", "us-west-2"], data.aws_region.current.region)
+      error_message = "AskWRI only supports the US regions us-east-1, us-east-2 and us-west-2 (the model ids start with 'us.'). Set your profile's region or AWS_DEFAULT_REGION to one of them."
+    }
+  }
 }
 
 # Queue 1: one message per PDF to convert

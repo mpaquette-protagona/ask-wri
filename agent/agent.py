@@ -14,7 +14,6 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from labels import REGIONS, TAGS, TOPICS
 
 # ---- Constants ----
-REGION = "us-east-1"
 DOCS_TABLE = "askwri-documents"
 VECTOR_BUCKET = "askwri-vectors"
 VECTOR_INDEX = "askwri-index"
@@ -44,7 +43,8 @@ directions". Start every suggestion with "Suggestion:". End with one line noting
 reflect the sample of documents loaded, not all of WRI's work."""
 
 # ---- AWS clients (no profile: AgentCore gives us an IAM role) ----
-session = boto3.Session(region_name=REGION)
+session = boto3.Session()
+REGION = session.region_name or "us-east-1"  # AgentCore sets the region; the fallback is only a safety net
 brt = session.client("bedrock-runtime")
 s3v = session.client("s3vectors")
 s3 = session.client("s3")

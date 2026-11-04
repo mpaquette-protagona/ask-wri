@@ -52,11 +52,11 @@ TOOL_CONFIG = {
 }
 
 config = Config(read_timeout=600, retries={"max_attempts": 10, "mode": "adaptive"})
-s3 = boto3.client("s3", region_name="us-east-1")
-brt = boto3.client("bedrock-runtime", region_name="us-east-1", config=config)
-sqs = boto3.client("sqs", region_name="us-east-1")
-s3v = boto3.client("s3vectors", region_name="us-east-1")
-docs_table = boto3.resource("dynamodb", region_name="us-east-1").Table(DOCS_TABLE)
+s3 = boto3.client("s3")
+brt = boto3.client("bedrock-runtime", config=config)
+sqs = boto3.client("sqs")
+s3v = boto3.client("s3vectors")
+docs_table = boto3.resource("dynamodb").Table(DOCS_TABLE)
 
 
 def make_doc_id(s3_key):

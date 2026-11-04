@@ -17,10 +17,10 @@ CHUNK_SIZE = 2000   # characters (about 500 tokens)
 OVERLAP = 200
 UPLOAD_BATCH = 500
 
-s3 = boto3.client("s3", region_name="us-east-1")
-brt = boto3.client("bedrock-runtime", region_name="us-east-1")
-s3v = boto3.client("s3vectors", region_name="us-east-1")
-docs_table = boto3.resource("dynamodb", region_name="us-east-1").Table(DOCS_TABLE)
+s3 = boto3.client("s3")
+brt = boto3.client("bedrock-runtime")
+s3v = boto3.client("s3vectors")
+docs_table = boto3.resource("dynamodb").Table(DOCS_TABLE)
 
 
 def chunk_text(text):

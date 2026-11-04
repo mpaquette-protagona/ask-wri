@@ -66,7 +66,7 @@ resource "aws_iam_role_policy" "agent" {
         Effect = "Allow"
         Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents",
         "logs:DescribeLogGroups", "logs:DescribeLogStreams"]
-        Resource = "arn:aws:logs:us-east-1:${data.aws_caller_identity.me.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.me.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
       },
       {
         Effect = "Allow"

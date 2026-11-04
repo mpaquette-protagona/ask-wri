@@ -1,0 +1,8 @@
+# One S3 key per line, e.g. 2024_publications/2024-methane-briefing-EN.pdf
+# If no keys are listed, ALL PDFs in the bucket are ingested.
+2024_publications/2024-carbon-management-briefing-EN.pdf
+2024_publications/2024-ccg-year-in-review.pdf
+2024_publications/2024-china-us-dialogue-summary-CN.pdf
+2024_publications/2024-climate-finance-carbon-pricing-briefing-EN.pdf
+2024_publications/2024-energy-efficiency-briefing-CN.pdf
+2024_publications/2024-energy-efficiency-briefing-EN.pdf

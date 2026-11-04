@@ -1,0 +1,15 @@
+# Terraform: state can contain account details, and each person has their own
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.zip
+terraform/terraform.tfvars
+
+# AgentCore deploy settings (specific to one AWS account)
+agent/.bedrock_agentcore/
+agent/.bedrock_agentcore.yaml
+
+# Python
+__pycache__/
+*.pyc
+.venv/

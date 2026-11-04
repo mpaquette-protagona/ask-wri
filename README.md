@@ -11,6 +11,76 @@ It runs entirely on AWS (Amazon Bedrock, S3, DynamoDB, SQS, Lambda, AgentCore). 
 
 ---
 
+## Quick start: deploy it into your own AWS account
+
+You need Python 3.12, Terraform, the AWS CLI, and an AWS account with Amazon Bedrock model access in **us-east-1** (Claude Sonnet 5.5, Claude Haiku 5.5, Titan Text Embeddings V2). Do **not** change the region; the models are set up for `us-east-1`. Commands are PowerShell, run from the repo root.
+
+### Step A: edit these values first (before running anything)
+
+Find your AWS account id (12 digits) with:
+
+```powershell
+aws sts get-caller-identity --profile YOUR_PROFILE --query Account --output text
+```
+
+| # | File | Line to change | Put |
+|---|---|---|---|
+| 1 | `terraform/main.tf` | `profile = "builder"` | your AWS profile name |
+| 2 | `terraform/main.tf` | `source_bucket = "wri-bucket-6157-5871-0841"` | the S3 bucket that holds your PDFs |
+| 3 | `lambdas/sections_handler.py` | `SOURCE_BUCKET = "wri-bucket-6157-5871-0841"` | the same PDF bucket |
+| 4 | `ingest/common.py` | `SOURCE_BUCKET = ...` and `PROFILE = "builder"` | the same PDF bucket, and your profile name |
+| 5 | `app/streamlit_app.py` | `profile_name="builder"` | your profile name |
+| 6 | `docs_to_ingest.txt` | the list of keys | the PDFs you want to ingest, one S3 key per line (e.g. `2024_publications/some-file.pdf`) |
+
+One more value you only learn later, in step 5 below: `AGENT_ARN` in `app/streamlit_app.py`.
+
+> **Careful with step A6:** if `docs_to_ingest.txt` has no keys, **every PDF in the bucket is ingested** (it could be hundreds).
+
+### Step B: run these commands in order
+
+**1. Install the Python packages**
+```powershell
+pip install -r requirements.txt
+```
+
+**2. Package the agent.** This builds `agent/agent_code.zip` (the agent code plus its libraries, for AgentCore's Linux machines). Terraform uploads it in the next step.
+```powershell
+python agent/build_zip.py
+```
+
+**3. Create everything in AWS**: the tables, vector index, buckets, queues, Lambdas and the AgentCore agent. Type `yes` when asked. It takes a few minutes.
+```powershell
+cd terraform
+terraform init
+terraform apply
+cd ..
+```
+
+**4. Ingest your PDFs.** This only queues them; the Lambdas then work in the background (about 20 to 40 seconds per PDF, plus about a minute for embedding).
+```powershell
+python ingest/1_start_ingestion.py
+```
+
+**5. Point the chat page at your agent.** Print the agent's ARN:
+```powershell
+cd terraform
+terraform output -raw agent_runtime_arn
+cd ..
+```
+Paste the result into `AGENT_ARN = "..."` in `app/streamlit_app.py`.
+
+**6. Open the chat page**
+```powershell
+streamlit run app/streamlit_app.py
+```
+Go to http://localhost:8501. Try the example questions further down.
+
+**After you change `agent/agent.py` or `agent/labels.py`:** run `python agent/build_zip.py` and then `terraform apply` again (from `terraform/`). Terraform uploads the new zip and updates the agent.
+
+The rest of this README explains how everything works and covers details such as re-ingesting, running the agent locally, and tearing down.
+
+---
+
 ## How it works
 
 ```
@@ -59,7 +129,7 @@ README.md                 this file
 SPEC.md                   the full build specification (the source of truth)
 requirements.txt          Python packages for the scripts and the Streamlit app
 docs_to_ingest.txt        which PDFs to ingest (one S3 key per line; empty = ALL PDFs)
-terraform/                all infrastructure as code (tables, buckets, queues, Lambdas, IAM)
+terraform/                all infrastructure as code (tables, buckets, queues, Lambdas, the agent, IAM)
 lambdas/
   sections_handler.py     Lambda 1: PDF -> section text files + metadata
   embed_handler.py        Lambda 2: section -> chunks -> vectors
@@ -69,6 +139,7 @@ ingest/
   1_start_ingestion.py    sends one SQS message per PDF
 agent/
   agent.py                the chat agent (runs on AgentCore)
+  build_zip.py            packages the agent into agent_code.zip for Terraform
   labels.py               copy of lambdas/labels.py (keep them identical!)
   requirements.txt        packages the deployed agent needs
 app/
@@ -83,36 +154,26 @@ You need:
 
 - **Python 3.12** and `pip`
 - **Terraform** (1.5 or newer)
-- An **AWS account** with permission to create the resources above, and an AWS CLI/SDK profile named **`builder`** (`aws configure --profile builder`). The region used everywhere is **`us-east-1`**.
+- An **AWS account** with permission to create the resources above, and an AWS CLI profile (the code uses the name `builder`; change it in step A if yours is different, e.g. create it with `aws configure --profile builder`). The region used everywhere is **`us-east-1`**.
 - **Amazon Bedrock model access** in `us-east-1` for: Claude Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`), Claude Haiku 5.5 (`us.anthropic.claude-haiku-5-5`) and Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`).
-- The WRI PDFs in an S3 bucket you can read (this project uses `wri-bucket-6157-5871-0841`, folder `2024_publications/`).
+- The PDFs in an S3 bucket your profile can read (the original project used `wri-bucket-6157-5871-0841`, folder `2024_publications/`). Each PDF must be under 4.5 MB.
 
 Commands below are for **PowerShell** on Windows.
 
 ---
 
-## Set it up and run it
+## The steps in more detail
 
-### 1. Install the Python packages
+The Quick start at the top is all you need to follow. This section explains what the steps do, and covers re-ingesting and running the agent on your own computer.
 
-```powershell
-pip install -r requirements.txt
-```
+### What `python agent/build_zip.py` does
+AgentCore runs the agent on its own Linux ARM64 machines, so the agent's Python libraries have to be downloaded for that platform (not for your PC) and zipped together with `agent.py` and `labels.py`. The script does exactly that and writes `agent/agent_code.zip` (about 25 MB). Run it again whenever you change `agent/agent.py` or `agent/labels.py`, then run `terraform apply`. Terraform sees the new zip, uploads it, and updates the agent.
 
-### 2. Create the AWS infrastructure
+### What `terraform apply` creates
+The DynamoDB table (document details), the S3 Vectors bucket and index (searchable chunks), the S3 bucket for section text files, the two SQS queues, the two Lambdas with their permissions, an S3 bucket for the agent's code zip, the agent's IAM role, and the AgentCore agent itself (`askwri_agent`).
 
-```powershell
-cd terraform
-terraform init
-terraform apply        # type "yes" when asked
-cd ..
-```
-
-This creates the DynamoDB table, the vector index, the sections bucket, the two queues and the two Lambdas. (Leave `agent_role_name` empty for now. See step 6.)
-
-### 3. Choose which PDFs to ingest
-
-Open [docs_to_ingest.txt](docs_to_ingest.txt) and list one S3 key per line, for example:
+### Choosing which PDFs to ingest
+List one S3 key per line in [docs_to_ingest.txt](docs_to_ingest.txt), for example:
 
 ```
 2024_publications/2024-energy-efficiency-briefing-EN.pdf
@@ -123,57 +184,20 @@ Open [docs_to_ingest.txt](docs_to_ingest.txt) and list one S3 key per line, for 
 
 Each PDF must be small enough to send to the model in one piece (under 4.5 MB).
 
-### 4. Ingest
-
-```powershell
-python ingest/1_start_ingestion.py
-```
-
-This only sends messages. The Lambdas do the work in the background, roughly 20 to 40 seconds per PDF, and the section embedding finishes about a minute after that. To watch progress, open the CloudWatch logs of the `askwri-sections` and `askwri-embed` Lambdas, or look at the message counts of the `askwri-pdf-queue` and `askwri-section-queue` queues in the SQS console.
+### Ingesting
+`python ingest/1_start_ingestion.py` only sends messages. The Lambdas do the work in the background, roughly 20 to 40 seconds per PDF, and the section embedding finishes about a minute after that. To watch progress, open the CloudWatch logs of the `askwri-sections` and `askwri-embed` Lambdas, or look at the message counts of the `askwri-pdf-queue` and `askwri-section-queue` queues in the SQS console.
 
 **Re-ingesting a document replaces everything about it.** Run the script again with the same key and the old vectors, section files and document details are deleted and rebuilt from scratch. The one thing kept is a `source_url` you filled in by hand in the DynamoDB console.
 
-### 5. Try the agent locally
-
-Terminal 1, start the agent:
+### Running the agent on your own computer (optional)
+Instead of the hosted agent, you can run it locally. Terminal 1:
 
 ```powershell
-$env:AWS_PROFILE="builder"
+$env:AWS_PROFILE="YOUR_PROFILE"
 python agent/agent.py
 ```
 
-It serves on `http://localhost:8080`. Terminal 2, start the chat page, with `AGENT_ARN = ""` at the top of [app/streamlit_app.py](app/streamlit_app.py) so it talks to your local agent:
-
-```powershell
-streamlit run app/streamlit_app.py
-```
-
-Open http://localhost:8501 and ask a question.
-
-### 6. Deploy the agent to AgentCore (optional, for a hosted agent)
-
-```powershell
-cd agent
-$env:AWS_PROFILE="builder"
-$env:AWS_DEFAULT_REGION="us-east-1"
-agentcore configure -e agent.py -n askwri_agent -rf requirements.txt -dm --non-interactive
-agentcore deploy
-```
-
-Then:
-
-1. Copy the **Agent ARN** from the deploy output into `AGENT_ARN` in [app/streamlit_app.py](app/streamlit_app.py).
-2. Find the agent's execution role name in `agent/.bedrock_agentcore.yaml` (the `execution_role` line, the part after `role/`), put it in a new file `terraform/terraform.tfvars` (it isn't committed to git) as `agent_role_name = "..."`, and apply again so the agent is allowed to read the data:
-
-```powershell
-cd ..\terraform
-terraform apply
-cd ..
-```
-
-3. Run `streamlit run app/streamlit_app.py`. It now calls the hosted agent.
-
-After you change `agent/agent.py`, run `agentcore deploy` again from `agent/`.
+It serves on `http://localhost:8080`. Terminal 2: set `AGENT_ARN = ""` at the top of [app/streamlit_app.py](app/streamlit_app.py) so the chat page talks to your local agent, then run `streamlit run app/streamlit_app.py`.
 
 ---
 
@@ -188,21 +212,7 @@ After you change `agent/agent.py`, run `agentcore deploy` again from `agent/`.
 
 ## Changing the tags, regions or topics
 
-Edit the lists in [lambdas/labels.py](lambdas/labels.py) and copy the **identical** file to [agent/labels.py](agent/labels.py). Then run `terraform apply` (updates the Lambda), `agentcore deploy` (updates the agent), and re-ingest the documents so they get the new labels.
-
----
-
-## Using this in a different AWS account
-
-These account-specific values appear in the code and must be changed:
-
-| Value | Where |
-|---|---|
-| Source PDF bucket `wri-bucket-6157-5871-0841` | `ingest/common.py`, `lambdas/sections_handler.py`, `terraform/main.tf` |
-| Sections bucket `askwri-sections-615758710841` (it ends with the account id) | `agent/agent.py` |
-| Agent ARN | `app/streamlit_app.py` (set in step 6) |
-| Agent role name | `terraform/terraform.tfvars` (you create it in step 6) |
-| AWS profile `builder` and region `us-east-1` | `ingest/common.py`, `app/streamlit_app.py`, `terraform/main.tf` |
+Edit the lists in [lambdas/labels.py](lambdas/labels.py) and copy the **identical** file to [agent/labels.py](agent/labels.py). Then run `python agent/build_zip.py` and `terraform apply` (this updates both the Lambda and the agent), and re-ingest the documents so they get the new labels.
 
 ---
 
@@ -220,10 +230,8 @@ These account-specific values appear in the code and must be changed:
 ## Tearing it down
 
 ```powershell
-cd agent
-agentcore destroy          # removes the hosted agent
-cd ..\terraform
-terraform destroy          # removes everything Terraform created
+cd terraform
+terraform destroy          # type "yes"; removes everything, including the stored documents and vectors
 ```
 
-`terraform destroy` fails on the sections bucket while it still contains files; empty the bucket first (S3 console, or `aws s3 rm s3://askwri-sections-<account-id> --recursive`).
+Everything is in Terraform, so this one command removes it all.

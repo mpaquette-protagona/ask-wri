@@ -3,4 +3,3 @@ requests
 streamlit
 strands-agents
 bedrock-agentcore
-bedrock-agentcore-starter-toolkit

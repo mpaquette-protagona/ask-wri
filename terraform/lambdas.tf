@@ -119,7 +119,7 @@ resource "aws_lambda_function" "embed" {
   handler          = "embed_handler.handler"
   filename         = data.archive_file.embed.output_path
   source_code_hash = data.archive_file.embed.output_base64sha256
-  timeout          = 120
+  timeout          = 900
   memory_size      = 512
 
   environment {

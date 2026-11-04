@@ -15,6 +15,7 @@ resource "aws_dynamodb_table" "documents" {
 # Vector bucket
 resource "aws_s3vectors_vector_bucket" "vectors" {
   vector_bucket_name = "askwri-vectors"
+  force_destroy      = true # lets "terraform destroy" delete it even when it holds vectors
 }
 
 # Vector index
@@ -32,7 +33,8 @@ resource "aws_s3vectors_index" "chunks" {
 
 # Bucket that holds one text file per section
 resource "aws_s3_bucket" "sections" {
-  bucket = local.sections_bucket
+  bucket        = local.sections_bucket
+  force_destroy = true # lets "terraform destroy" delete it even when it holds files
 }
 
 # Queue 1: one message per PDF to convert
@@ -45,6 +47,6 @@ resource "aws_sqs_queue" "pdf" {
 # Queue 2: one message per section to embed
 resource "aws_sqs_queue" "section" {
   name                       = "askwri-section-queue"
-  visibility_timeout_seconds = 300 # longer than the embed Lambda timeout
+  visibility_timeout_seconds = 960 # longer than the embed Lambda timeout (900 seconds = 15 minutes)
   message_retention_seconds  = 3600
 }

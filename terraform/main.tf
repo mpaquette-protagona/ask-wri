@@ -11,12 +11,6 @@ provider "aws" {
   profile = "builder"
 }
 
-# Name of the role the AgentCore deploy created (the agent runs as this role).
-# Leave empty on the first apply; fill it in (terraform.tfvars) after deploying the agent.
-variable "agent_role_name" {
-  default = ""
-}
-
 locals {
   source_bucket   = "wri-bucket-6157-5871-0841"
   sections_bucket = "askwri-sections-${data.aws_caller_identity.me.account_id}"

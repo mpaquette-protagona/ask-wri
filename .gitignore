@@ -3,9 +3,14 @@ terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.*
 terraform/*.zip
-terraform/terraform.tfvars
+terraform/tfplan*
+terraform/*.tfvars
 
-# AgentCore deploy settings (specific to one AWS account)
+# Built agent package (create it with: python agent/build_zip.py)
+agent/build/
+agent/agent_code.zip
+
+# Old CLI deploy settings (no longer used)
 agent/.bedrock_agentcore/
 agent/.bedrock_agentcore.yaml
 

@@ -16,7 +16,6 @@ from labels import REGIONS, TAGS, TOPICS
 # ---- Constants ----
 REGION = "us-east-1"
 DOCS_TABLE = "askwri-documents"
-SECTIONS_BUCKET = "askwri-sections-615758710841"
 VECTOR_BUCKET = "askwri-vectors"
 VECTOR_INDEX = "askwri-index"
 CHAT_MODEL = "us.anthropic.claude-sonnet-5-5"
@@ -51,6 +50,9 @@ s3v = session.client("s3vectors")
 s3 = session.client("s3")
 dynamodb = session.resource("dynamodb")
 docs_table = dynamodb.Table(DOCS_TABLE)
+
+# The sections bucket name ends with the AWS account id (same rule as in Terraform)
+SECTIONS_BUCKET = "askwri-sections-" + session.client("sts").get_caller_identity()["Account"]
 
 # ---- Per-question state: call counts, sections already returned, source numbering ----
 state = {}

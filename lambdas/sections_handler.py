@@ -12,11 +12,12 @@ from botocore.config import Config
 
 from labels import LANGUAGES, REGIONS, TAGS, TOPICS
 
-SOURCE_BUCKET = "wri-bucket-6157-5871-0841"
+SOURCE_BUCKET = "askwri-corpus-920373005453"
+MANIFEST_KEY = "manifest.json"
 DOCS_TABLE = "askwri-documents"
 VECTOR_BUCKET = "askwri-vectors"
 VECTOR_INDEX = "askwri-index"
-EXTRACT_MODEL = "us.anthropic.claude-haiku-5-5"
+EXTRACT_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"  # Haiku 5.5 not subscribed in this sandbox
 SECTIONS_BUCKET = os.environ["SECTIONS_BUCKET"]
 SECTION_QUEUE_URL = os.environ["SECTION_QUEUE_URL"]
 
@@ -59,6 +60,22 @@ brt = boto3.client("bedrock-runtime", config=config)
 sqs = boto3.client("sqs")
 s3v = boto3.client("s3vectors")
 docs_table = boto3.resource("dynamodb").Table(DOCS_TABLE)
+
+
+def manifest_lookup(s3_key):
+    """Return {year, source_url, language} for this PDF from the corpus manifest, if present.
+    The real publication year matters for coverage-by-year analysis; the S3 folder prefix does not."""
+    try:
+        raw = s3.get_object(Bucket=SOURCE_BUCKET, Key=MANIFEST_KEY)["Body"].read()
+        for rec in json.loads(raw):
+            if rec.get("file") and s3_key.endswith(rec["file"]):
+                date = rec.get("publication_date") or ""
+                return {"year": date[:4] if date else "",
+                        "source_url": rec.get("source_url", ""),
+                        "language": rec.get("language", "")}
+    except Exception as e:
+        print("manifest lookup failed:", e)
+    return {}
 
 
 def make_doc_id(s3_key):
@@ -142,10 +159,11 @@ def handler(event, context):
 
     # 2. If this document was ingested before, delete its old vectors
     #    (the document row is replaced in step 5; a human-written source_url is kept)
+    meta = manifest_lookup(s3_key)
     old_row = docs_table.get_item(Key={"doc_id": doc_id}).get("Item")
-    source_url = ""
+    # Prefer a human-entered source_url on re-ingest; otherwise seed it from the manifest.
+    source_url = (old_row or {}).get("source_url") or meta.get("source_url", "")
     if old_row:
-        source_url = old_row.get("source_url", "")
         print(f"{doc_id}: re-ingesting, deleted {delete_old_vectors(doc_id)} old vectors")
 
     # 3. Delete old section files for this document, so re-runs leave nothing stale
@@ -172,7 +190,8 @@ def handler(event, context):
     # 5. Write a brand-new document row (replaces any old one completely).
     #    This happens before queueing, because the embed Lambda reads the row.
     docs_table.put_item(Item={
-        "doc_id": doc_id, "s3_key": s3_key, "year": s3_key.split("/")[0][:4],
+        "doc_id": doc_id, "s3_key": s3_key,
+        "year": meta.get("year") or s3_key.split("/")[0][:4],
         "resource_type": "research", "source_url": source_url,
         "source_bucket": SOURCE_BUCKET, "language": language,
         "title": data.get("document_title") or s3_key.split("/")[-1],

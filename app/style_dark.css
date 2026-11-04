@@ -19,7 +19,6 @@
   --dash: #44524a;
   --hover-tint: rgba(127, 209, 172, 0.1);
   --bar-1: #5bbd94; --bar-2: #3c8a69; --bar-3: #28594a; --bar-other: #3a4640;
-  --globe-filter: invert(1);
 }
 
 /* ---- text ---- */
@@ -59,8 +58,3 @@
 [role="dialog"] { background: var(--cream) !important; color: var(--ink); }
 [role="dialog"] [data-testid="stMarkdownContainer"] { color: var(--ink); }
 [data-testid="stDialog"] button[aria-label="Close"] { color: var(--ink) !important; }
-
-/* ---- language and theme pills ---- */
-.st-key-lang_bar [role="radiogroup"] { box-shadow: none; }
-.st-key-lang_bar button { color: var(--ink) !important; }
-.st-key-lang_bar [role="radiogroup"] button[aria-checked="true"] { background-color: var(--green) !important; color: #fff !important; }

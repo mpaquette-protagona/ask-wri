@@ -11,10 +11,11 @@ TEXT = {
     "en": {
         "nav_ask": "Ask a question", "nav_briefing": "Research briefing", "nav_gaps": "Find gaps",
         "mode_briefing": "Research briefing", "mode_gaps": "Find gaps",
+        "dark_mode": "Dark mode",
         "hint_ask": "Ask about WRI research", "hint_briefing": "Name a topic, e.g. electric school buses",
         "hint_gaps": "Name a topic, e.g. energy efficiency",
         "example_ask": "What does WRI say about food loss and waste in Kenya?",
-        "example_briefing": "Electric school buses", "example_gaps": "Energy efficiency", "recent": "Recent", "language_label": "Language",
+        "example_briefing": "Electric school buses", "example_gaps": "Energy efficiency", "recent": "Recent",
         "hero_title": "Ask WRI's research a question",
         "hero_sub": "Every answer cites the document, the pages and the passage it comes from. "
                     "Searching {count} publications from {first} to {last}.",
@@ -49,11 +50,12 @@ TEXT = {
     "es": {
         "nav_ask": "Hacer una pregunta", "nav_briefing": "Informe de investigación", "nav_gaps": "Detectar vacíos",
         "mode_briefing": "Informe de investigación", "mode_gaps": "Detectar vacíos",
+        "dark_mode": "Modo oscuro",
         "hint_ask": "Pregunta sobre la investigación de WRI",
         "hint_briefing": "Indica un tema, por ejemplo autobuses escolares eléctricos",
         "hint_gaps": "Indica un tema, por ejemplo eficiencia energética",
         "example_ask": "¿Qué dice WRI sobre la pérdida y el desperdicio de alimentos en Kenia?",
-        "example_briefing": "Autobuses escolares eléctricos", "example_gaps": "Eficiencia energética", "recent": "Recientes", "language_label": "Idioma",
+        "example_briefing": "Autobuses escolares eléctricos", "example_gaps": "Eficiencia energética", "recent": "Recientes",
         "hero_title": "Hazle una pregunta a la investigación de WRI",
         "hero_sub": "Cada respuesta cita el documento, las páginas y el pasaje de donde proviene. "
                     "Se buscan {count} publicaciones de {first} a {last}.",
@@ -88,11 +90,12 @@ TEXT = {
     "fr": {
         "nav_ask": "Poser une question", "nav_briefing": "Note de recherche", "nav_gaps": "Repérer les lacunes",
         "mode_briefing": "Note de recherche", "mode_gaps": "Repérer les lacunes",
+        "dark_mode": "Mode sombre",
         "hint_ask": "Posez une question sur les recherches du WRI",
         "hint_briefing": "Indiquez un sujet, par exemple les bus scolaires électriques",
         "hint_gaps": "Indiquez un sujet, par exemple l'efficacité énergétique",
         "example_ask": "Que dit le WRI sur les pertes et le gaspillage alimentaires au Kenya ?",
-        "example_briefing": "Bus scolaires électriques", "example_gaps": "Efficacité énergétique", "recent": "Récents", "language_label": "Langue",
+        "example_briefing": "Bus scolaires électriques", "example_gaps": "Efficacité énergétique", "recent": "Récents",
         "hero_title": "Posez une question aux recherches du WRI",
         "hero_sub": "Chaque réponse cite le document, les pages et le passage d'où elle provient. "
                     "Recherche dans {count} publications de {first} à {last}.",
@@ -127,11 +130,12 @@ TEXT = {
     "pt": {
         "nav_ask": "Fazer uma pergunta", "nav_briefing": "Resumo de pesquisa", "nav_gaps": "Encontrar lacunas",
         "mode_briefing": "Resumo de pesquisa", "mode_gaps": "Encontrar lacunas",
+        "dark_mode": "Modo escuro",
         "hint_ask": "Pergunte sobre as pesquisas do WRI",
         "hint_briefing": "Indique um tema, por exemplo ônibus escolares elétricos",
         "hint_gaps": "Indique um tema, por exemplo eficiência energética",
         "example_ask": "O que o WRI diz sobre perda e desperdício de alimentos no Quênia?",
-        "example_briefing": "Ônibus escolares elétricos", "example_gaps": "Eficiência energética", "recent": "Recentes", "language_label": "Idioma",
+        "example_briefing": "Ônibus escolares elétricos", "example_gaps": "Eficiência energética", "recent": "Recentes",
         "hero_title": "Faça uma pergunta às pesquisas do WRI",
         "hero_sub": "Cada resposta cita o documento, as páginas e o trecho de onde vem. "
                     "Pesquisando {count} publicações de {first} a {last}.",
@@ -166,10 +170,11 @@ TEXT = {
     "zh": {
         "nav_ask": "提问", "nav_briefing": "研究简报", "nav_gaps": "查找研究空白",
         "mode_briefing": "研究简报", "mode_gaps": "查找研究空白",
+        "dark_mode": "深色模式",
         "hint_ask": "询问 WRI 的研究",
         "hint_briefing": "输入主题，例如电动校车", "hint_gaps": "输入主题，例如能效",
         "example_ask": "WRI 如何看待肯尼亚的粮食损失和浪费？",
-        "example_briefing": "电动校车", "example_gaps": "能效", "recent": "最近", "language_label": "语言",
+        "example_briefing": "电动校车", "example_gaps": "能效", "recent": "最近",
         "hero_title": "向 WRI 的研究提问",
         "hero_sub": "每个回答都会标明所依据的文件、页码和段落。当前检索 {first} 年至 {last} 年的 {count} 份出版物。",
         "searching": "正在检索并阅读 WRI 文件，最多可能需要一分钟。",
@@ -200,11 +205,12 @@ TEXT = {
     "hi": {
         "nav_ask": "प्रश्न पूछें", "nav_briefing": "शोध सारांश", "nav_gaps": "शोध अंतराल खोजें",
         "mode_briefing": "शोध सारांश", "mode_gaps": "शोध अंतराल खोजें",
+        "dark_mode": "डार्क मोड",
         "hint_ask": "WRI के शोध के बारे में पूछें",
         "hint_briefing": "कोई विषय बताएँ, जैसे इलेक्ट्रिक स्कूल बस", "hint_gaps": "कोई विषय बताएँ, जैसे ऊर्जा दक्षता",
         "example_ask": "केन्या में खाद्य हानि और बर्बादी के बारे में WRI क्या कहता है?",
         "example_briefing": "इलेक्ट्रिक स्कूल बस", "example_gaps": "ऊर्जा दक्षता",
-        "recent": "हाल के", "language_label": "भाषा",
+        "recent": "हाल के",
         "hero_title": "WRI के शोध से कोई प्रश्न पूछें",
         "hero_sub": "हर उत्तर में दस्तावेज़, पृष्ठ और वह अंश बताया जाता है जिससे वह लिया गया है। "
                     "{first} से {last} तक के {count} प्रकाशनों में खोज की जा रही है।",

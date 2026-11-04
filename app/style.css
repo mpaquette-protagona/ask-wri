@@ -18,7 +18,9 @@
   --dash: #cfc7b2;
   --hover-tint: rgba(31, 92, 69, 0.08);
   --bar-1: #1f5c45; --bar-2: #5e9a80; --bar-3: #b7d4c5; --bar-other: #d8d3c6;
-  --globe-filter: none;
+  --icon-sun: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cpath d='M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'/%3E%3C/svg%3E");
+  --icon-moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'/%3E%3C/svg%3E");
+  --globe: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z'/%3E%3C/svg%3E");
   --serif: "Source Serif", "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", "Source Sans", sans-serif;  /* ends in a font that always loads, so text can never vanish */
 }
 
@@ -115,28 +117,45 @@ html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"] { backgrou
 .rel-bar span { display: block; height: 100%; background: var(--green); border-radius: 4px; }
 .rel-text { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 
-/* top-right bar: globe, language pill, light/dark pill. Always one right-aligned row; buttons never shrink or truncate. */
-[data-testid="stVerticalBlock"].st-key-lang_bar { flex-direction: row; flex-wrap: nowrap; justify-content: flex-end; align-items: center;
+/* ---- top right: language dropdown and dark-mode switch, one right-aligned row ---- */
+[data-testid="stVerticalBlock"].st-key-top_bar { flex-direction: row; flex-wrap: nowrap; justify-content: flex-end; align-items: center;
   gap: 12px; margin-bottom: 0.4rem; }
-.st-key-lang_bar > [data-testid="stElementContainer"] { flex: 0 0 auto; width: auto !important; min-width: 0; }
-.st-key-lang_bar [role="radiogroup"] { width: max-content; }
-.st-key-lang_bar button { flex: 0 0 auto; white-space: nowrap; }
-.st-key-lang_bar button p { white-space: nowrap; overflow: visible; text-overflow: clip; }
-.lang-globe { display: block; width: 20px; height: 20px; opacity: 0.6; filter: var(--globe-filter); background: no-repeat center / contain
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d2a24' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z'/%3E%3C/svg%3E"); }
-.st-key-lang_bar [role="radiogroup"] { flex-wrap: nowrap; gap: 2px; background: var(--surface); border: 1px solid var(--line);
-  border-radius: 999px; padding: 3px; box-shadow: 0 1px 2px rgba(29, 42, 36, 0.05); }
-.st-key-lang_bar button { border: 0; border-radius: 999px; background: transparent; color: var(--ink); min-height: 0;
-  padding: 4px 13px; font-size: 0.85rem; box-shadow: none; }
-.st-key-lang_bar button:hover { background: var(--green-soft); color: var(--ink); }
-/* Streamlit tints the selected button itself; !important makes the selected language solid green */
-.st-key-lang_bar [role="radiogroup"] button[aria-checked="true"],
-.st-key-lang_bar [role="radiogroup"] button[aria-checked="true"]:hover { background-color: var(--green) !important; color: #fff !important; font-weight: 600; }
-.st-key-lang_bar [role="radiogroup"] button[aria-checked="true"] * { color: #fff !important; }
+.st-key-top_bar > [data-testid="stElementContainer"] { flex: 0 0 auto; width: auto !important; }
 
-/* light/dark toggle: two icon buttons (sun, moon) in the same pill style */
-.st-key-theme_widget button { padding: 4px 10px; }
-.st-key-theme_widget [data-testid="stIconMaterial"], .st-key-theme_widget span[class*="material"] { font-size: 1.15rem; }
+/* language: a pill that shows only the chosen language, with a globe inside it */
+.st-key-ui_lang { width: 176px !important; }
+.st-key-ui_lang [role="group"] { position: relative; min-height: 40px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding-left: 38px; cursor: pointer; box-shadow: 0 1px 2px rgba(29, 42, 36, 0.05);
+  transition: border-color 0.15s, box-shadow 0.15s; }
+.st-key-ui_lang [role="group"]:hover { border-color: var(--green-2); }
+.st-key-ui_lang [role="group"][data-focus-within="true"] { border-color: var(--green); box-shadow: 0 0 0 3px var(--hover-tint); }
+.st-key-ui_lang [role="group"]::before { content: ""; position: absolute; left: 14px; top: 50%; width: 18px; height: 18px;
+  transform: translateY(-50%); background: var(--ink); opacity: 0.65; pointer-events: none;
+  -webkit-mask: var(--globe) center / contain no-repeat; mask: var(--globe) center / contain no-repeat; }
+.st-key-ui_lang input { color: var(--ink); font-size: 0.92rem; font-weight: 500; caret-color: transparent; cursor: pointer; }
+.st-key-ui_lang button { color: var(--muted); background: transparent; }
+
+/* the open list */
+[data-testid="stSelectboxVirtualDropdown"] { background: var(--surface) !important; border: 1px solid var(--line);
+  border-radius: 14px !important; padding: 4px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14); }
+[data-testid="stSelectboxVirtualDropdown"] [role="option"] > div { border-radius: 10px; padding: 6px 12px; color: var(--ink); font-size: 0.92rem; }
+[data-testid="stSelectboxVirtualDropdown"] [role="option"]:hover > div { background: var(--green-soft); }
+[data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"] > div { background: var(--green-soft); color: var(--accent); font-weight: 600; }
+
+/* light/dark: a sun, a switch and a moon in one pill. The icon for the current mode is bright, the other is faded. */
+.st-key-dark_mode { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 14px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 1px 2px rgba(29, 42, 36, 0.05); }
+.st-key-dark_mode::before, .st-key-dark_mode::after { content: ""; flex: 0 0 18px; width: 18px; height: 18px;
+  transition: opacity 0.15s; mask-repeat: no-repeat; mask-position: center; mask-size: contain;
+  -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-size: contain; }
+.st-key-dark_mode::before { background: #e0a020; opacity: 1; -webkit-mask-image: var(--icon-sun); mask-image: var(--icon-sun); }
+.st-key-dark_mode::after { background: var(--ink); opacity: 0.3; -webkit-mask-image: var(--icon-moon); mask-image: var(--icon-moon); }
+.st-key-dark_mode:has(input:checked)::before { opacity: 0.3; }
+.st-key-dark_mode:has(input:checked)::after { opacity: 1; background: var(--accent); }
+.st-key-dark_mode label { cursor: pointer; }
+.st-key-dark_mode label > div:not([data-testid]) { background-color: var(--line) !important; }
+.st-key-dark_mode label:has(input:checked) > div:not([data-testid]) { background-color: var(--green) !important; }
+.st-key-dark_mode label > div:not([data-testid]) > div { background-color: #fff !important; }
 
 /* text colour set explicitly: the document pop-up is drawn outside the page, so it cannot inherit it */
 .src-title, .src-section, .passage, .q-bubble, .tile-n, .found-title, .c-title, .hero-title, .found-note { color: var(--ink); }

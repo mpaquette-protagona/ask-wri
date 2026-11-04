@@ -138,8 +138,8 @@ if "session_id" not in st.session_state:
 with st.container(key="top_bar"):
     st.selectbox("Language", list(i18n.UI_LANGUAGES), format_func=i18n.UI_LANGUAGES.get, key="ui_lang",
                  label_visibility="collapsed", accept_new_options=False)
-    st.toggle("Dark mode", key="dark_mode", label_visibility="collapsed")
-tr = i18n.Tr(st.session_state.ui_lang)
+    tr = i18n.Tr(st.session_state.ui_lang)
+    st.toggle(tr("dark_mode"), key="dark_mode", label_visibility="collapsed")  # sun and moon are drawn by style.css
 
 lib = library()
 turns = st.session_state.turns

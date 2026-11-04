@@ -8,11 +8,10 @@ terraform {
 
 provider "aws" {
   region  = "us-east-1"
-  profile = "builder"
 }
 
 locals {
-  source_bucket   = "wri-bucket-6157-5871-0841"
+  source_bucket   = "wri-publications"
   sections_bucket = "askwri-sections-${data.aws_caller_identity.me.account_id}"
 }
 

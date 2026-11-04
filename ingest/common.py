@@ -7,10 +7,10 @@ import boto3
 from botocore.config import Config
 
 # ---- Constants ----
-SOURCE_BUCKET = "wri-bucket-6157-5871-0841"
+SOURCE_BUCKET = "wri-publications"
 PDF_QUEUE = "askwri-pdf-queue"
 REGION = "us-east-1"
-PROFILE = "builder"
+PROFILE = None  # None = default AWS credentials
 
 # Path to the list of PDFs, one folder above this file
 DOCS_FILE = os.path.join(os.path.dirname(__file__), "..", "docs_to_ingest.txt")

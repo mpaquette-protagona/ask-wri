@@ -12,7 +12,7 @@ from botocore.config import Config
 
 from labels import REGIONS, TAGS, TOPICS
 
-SOURCE_BUCKET = "wri-bucket-6157-5871-0841"
+SOURCE_BUCKET = "wri-publications"
 DOCS_TABLE = "askwri-documents"
 VECTOR_BUCKET = "askwri-vectors"
 VECTOR_INDEX = "askwri-index"
@@ -78,7 +78,7 @@ def ask_claude(pdf_bytes):
                 {"document": {"format": "pdf", "name": "document", "source": {"bytes": pdf_bytes}}},
                 {"text": PROMPT},
             ]}],
-            inferenceConfig={"maxTokens": 32000},
+            inferenceConfig={"maxTokens": 64000},
         )
         text = "".join(b.get("text", "") for b in resp["output"]["message"]["content"]).strip()
         # Remove code fences if present

@@ -20,7 +20,8 @@ VECTOR_BUCKET = "askwri-vectors"
 VECTOR_INDEX = "askwri-index"
 CHAT_MODEL = "us.anthropic.claude-sonnet-5-5"
 EMBED_MODEL = "amazon.titan-embed-text-v2:0"
-MAX_SEARCHES = 5  # search_wri calls allowed per question
+MAX_SEARCHES = 5        # search_wri calls allowed per question for the research agent
+GAPS_MAX_SEARCHES = 12  # the gaps agent must read many documents, so it gets more
 
 ORCHESTRATOR_PROMPT = """You are AskWRI, the front desk for World Resources Institute (WRI) research.
 Send questions and briefing requests to research_agent. Send questions about coverage, gaps,
@@ -28,20 +29,47 @@ or what WRI has not yet studied to gaps_agent. Include relevant context from ear
 conversation in the request you pass on. Return the agent's answer to the user unchanged,
 including every citation. Never answer from your own knowledge."""
 
+SOURCES_RULES = """Citations and Sources:
+- End every factual sentence with a citation like [1]. Use only numbers from the [SOURCE n] blocks you were given.
+- Finish with a line that says exactly "## Sources", then a markdown list with ONE bullet per document
+  (not per section): **Title** (Year; Regions; Topics, from the header), with a [link](URL) only if the
+  header has a URL (URL: none means omit it).
+  Under it, one nested bullet per cited section: [n] pp. X-Y: "short supporting quote". Use "p. X" when
+  the first and last page are the same. Copy titles, pages and URLs exactly from the [SOURCE n] headers.
+- Check every page range against its header before you finish. Never add corrections, apologies or notes
+  about mistakes to the answer; fix the list instead."""
+
 RESEARCH_PROMPT = """You answer ONLY from WRI documents returned by the search_wri tool. Never use outside knowledge.
-- Search before answering. Use the region or tag filter when the user names a region or topic.
-- End every factual sentence with a citation like [1]. Finish with a "Sources" list, one line per
-  source: [n] Title, pages X-Y, URL, then a short quoted passage that supports the claim.
+- Search before answering. Use the region, topic or tag filter when the user names one.
 - If search_wri returns NO_RESULTS, or the sections do not actually answer the question, reply
   exactly: "I couldn't find this in the WRI documents I have access to." and stop. Do not guess.
-- If the user asks for a briefing, use this format: Summary (3-4 sentences), Key findings
-  (bullets, each cited), Related WRI publications (titles and links), Sources."""
+- If the user asks for a briefing, use exactly this structure, in this order:
+  ## At a glance
+  A markdown table with columns Figure | What it measures | Source, holding 4 to 6 headline numbers that
+  appear in the sections you were given (each with its [n]). Under the table, one line:
+  "Based on N WRI documents, FIRST YEAR to LAST YEAR, REGIONS", built only from the Year and Regions
+  fields of the documents you actually cite. Never invent or round a number.
+  ## Briefing
+  Summary (3-4 sentences), then Key findings (bullets, each cited), then Related WRI publications
+  (titles, with links only when a URL exists).
+  ## Sources
+""" + SOURCES_RULES
 
-GAPS_PROMPT = """You map WRI's research coverage on a topic. Use search_wri and list_documents to see what WRI
-has published. Reply with three parts: "What WRI has covered" (cited, using [n] citations and a
-Sources list: [n] Title, pages X-Y, URL), "Where coverage is thin", and "Suggested research
-directions". Start every suggestion with "Suggestion:". End with one line noting that gaps may
-reflect the sample of documents loaded, not all of WRI's work."""
+GAPS_PROMPT = """You map WRI's research coverage on a topic, using ONLY the documents in this library
+(search_wri and list_documents). Never use outside knowledge.
+Method: call list_documents with the matching tag, topic or region to see every matching document. Then read
+each of them with search_wri, using its document filter, until the search limit. If there are more documents
+than searches, name the ones you did not read and describe them only by title and tags.
+Reply with exactly these parts, in this order:
+1. A line starting "**In short:**" with two or three sentences giving the main finding.
+2. A short italic line saying that gaps are relative to the documents loaded in this library, not to all of WRI's work.
+3. "## What WRI has covered": cited findings grouped by document, every sentence ending with [n].
+4. "## Where coverage is thin": a markdown table with columns Area | What is missing | Evidence. Evidence names
+   the documents that show it, or says no document in the library covers it. Never say "WRI has not studied this";
+   say "not in the loaded library".
+5. "## Suggested research directions": every item starts with "Suggestion:".
+6. "## Sources".
+""" + SOURCES_RULES
 
 # ---- AWS clients (no profile: AgentCore gives us an IAM role) ----
 session = boto3.Session(region_name=REGION)
@@ -60,7 +88,7 @@ state = {}
 
 def reset_state():
     """Called at the start of every question."""
-    state.update(searches=0, seen=set(), source_no=0)
+    state.update(searches=0, seen=set(), source_no=0, max_searches=MAX_SEARCHES)
 
 
 reset_state()
@@ -85,9 +113,14 @@ def read_section(doc_id, section_id):
     doc = docs_table.get_item(Key={"doc_id": doc_id})["Item"]
     state["seen"].add((doc_id, section_id))
     state["source_no"] += 1
+    first, last = info["page_start"], info["page_end"]
+    pages = first if first == last else f"{first}-{last}"
     return (f"[SOURCE {state['source_no']}] Title: {doc.get('title', doc_id)} | "
-            f"URL: {doc.get('source_url') or 'no web page'} | "
-            f"Pages: {info['page_start']}-{info['page_end']} | "
+            f"URL: {doc.get('source_url') or 'none'} | "
+            f"Year: {doc.get('year', 'unknown')} | "
+            f"Regions: {', '.join(doc.get('regions', [])) or 'none'} | "
+            f"Topics: {', '.join(doc.get('topics', [])) or 'none'} | "
+            f"Pages: {pages} | "
             f"Section: {urllib.parse.unquote(info['title'])}\n{text}")
 
 
@@ -105,10 +138,10 @@ def search_wri(query: str = "", region: Optional[Region] = None, topic: Optional
     Give a query (semantic search), and/or filters (region, topic, tag; each limits the search
     to documents with that value; document is a document id from list_documents and limits the
     search to that one document). At least one of them is required. Returns up to 5 sections
-    you have not been given yet. You may call this at most 5 times per question."""
+    you have not been given yet. The number of calls per question is limited."""
     if not (query or region or topic or tag or document):
         return "Give a query and/or at least one filter."
-    if state["searches"] >= MAX_SEARCHES:
+    if state["searches"] >= state["max_searches"]:
         return "RETRIEVAL_LIMIT_REACHED: no more searches allowed. Answer with what you have."
     state["searches"] += 1
 
@@ -182,14 +215,14 @@ MODEL = BedrockModel(model_id=CHAT_MODEL, region_name=REGION)
 @tool
 def research_agent(request: str) -> str:
     """Answer a question about WRI research, or write a research briefing, with citations."""
-    state["searches"] = 0  # each sub-agent gets its own 5 searches
+    state.update(searches=0, max_searches=MAX_SEARCHES)  # each sub-agent gets its own searches
     return str(Agent(model=MODEL, system_prompt=RESEARCH_PROMPT, tools=[search_wri])(request))
 
 
 @tool
 def gaps_agent(topic: str) -> str:
     """Map what WRI has published on a topic and suggest gaps and follow-up research."""
-    state["searches"] = 0  # each sub-agent gets its own 5 searches
+    state.update(searches=0, max_searches=GAPS_MAX_SEARCHES)
     return str(Agent(model=MODEL, system_prompt=GAPS_PROMPT, tools=[search_wri, list_documents])(topic))
 
 

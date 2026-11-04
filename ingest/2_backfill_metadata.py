@@ -22,13 +22,18 @@ def make_doc_id(s3_key):
 table = common.session.resource("dynamodb").Table(TABLE)
 metadata = json.load(open(META_FILE))
 
+updated, skipped = 0, []
 for s3_key, meta in metadata.items():
-    table.update_item(
-        Key={"doc_id": make_doc_id(s3_key)},
-        UpdateExpression="SET resource_type = :t, #st = :s, subtype_label = :l, pages_total = :p",
-        ExpressionAttributeNames={"#st": "subtype"},  # "subtype" is a DynamoDB reserved word
-        ConditionExpression="attribute_exists(doc_id)",  # never create a half-empty row
-        ExpressionAttributeValues={":t": meta["resource_type"], ":s": meta["subtype"],
-                                   ":l": meta["subtype_label"], ":p": meta["pages_total"]},
-    )
-print(f"Updated {len(metadata)} documents.")
+    try:
+        table.update_item(
+            Key={"doc_id": make_doc_id(s3_key)},
+            UpdateExpression="SET resource_type = :t, #st = :s, subtype_label = :l, pages_total = :p",
+            ExpressionAttributeNames={"#st": "subtype"},  # "subtype" is a DynamoDB reserved word
+            ConditionExpression="attribute_exists(doc_id)",  # never create a half-empty row
+            ExpressionAttributeValues={":t": meta["resource_type"], ":s": meta["subtype"],
+                                       ":l": meta["subtype_label"], ":p": meta["pages_total"]},
+        )
+        updated += 1
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        skipped.append(s3_key)  # this PDF has not been ingested (yet)
+print(f"Updated {updated} documents; skipped {len(skipped)} that are not in the table.")

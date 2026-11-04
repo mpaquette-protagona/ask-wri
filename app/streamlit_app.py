@@ -79,6 +79,13 @@ def go_home():
     st.session_state.pop("queued", None)
 
 
+def submit_home():
+    """The question typed into the big box on the start screen: queue it and let the page rerun."""
+    text = (st.session_state.get("home_input") or "").strip()
+    if text:
+        queue(text, st.session_state.mode)
+
+
 def view_turn(index):
     st.session_state.view = index
 
@@ -160,13 +167,15 @@ with st.sidebar:
 # ---- decide what to run (typed question, example button, or "Turn into briefing") --------
 mode = st.session_state.mode
 job = st.session_state.pop("queued", None)
-typed = st.chat_input(tr(f"hint_{mode}"), key=f"input_{mode}")
-if typed:
-    job = {"question": typed.strip(), "mode": mode}
+view = st.session_state.view
+at_home = job is None and not (view is not None and view < len(turns))
+if not at_home:  # on the start screen the question box is part of the page (see below)
+    typed = st.chat_input(tr(f"hint_{mode}"), key=f"input_{mode}")
+    if typed:
+        job = {"question": typed.strip(), "mode": mode}
 if job:
     job.update(language=tr.answer_language)
 
-view = st.session_state.view
 turn = turns[view] if (not job and view is not None and view < len(turns)) else None
 has_sources = turn is not None and any(s["cited"] for s in turn["result"]["sources"])
 
@@ -196,11 +205,14 @@ with center:
 
     elif turn is None:
         years = lib["years"]
-        st.html(f'<div class="hero"><div class="hero-title">{ui.esc(tr("hero_title"))}</div>'
-                f'<div class="hero-sub">{ui.esc(tr("hero_sub", count=lib["count"], first=years[0] if years else "", last=years[-1] if years else ""))}</div></div>')
-        for example_mode in MODES:
-            st.button(f"{tr(f'nav_{example_mode}')}: {tr(f'example_{example_mode}')}", key=f"example_{example_mode}",
-                      use_container_width=True, on_click=queue, args=(tr(f"example_{example_mode}"), example_mode))
+        with st.container(key="home"):
+            st.html(f'<div class="hero-title">{ui.esc(tr("hero_title"))}</div>'
+                    f'<div class="hero-sub">{ui.esc(tr("hero_sub", count=lib["count"], first=years[0] if years else "", last=years[-1] if years else ""))}</div>')
+            st.chat_input(tr(f"hint_{mode}"), key="home_input", on_submit=submit_home)
+            st.html(f'<div class="try-label">{ui.esc(tr("try_example"))}</div>')
+            for example_mode in MODES:
+                st.button(f"{tr(f'nav_{example_mode}')}: {tr(f'example_{example_mode}')}", key=f"example_{example_mode}",
+                          use_container_width=True, on_click=queue, args=(tr(f"example_{example_mode}"), example_mode))
 
     else:
         result, stats, documents = turn["result"], turn["result"]["stats"], turn["result"]["documents"]

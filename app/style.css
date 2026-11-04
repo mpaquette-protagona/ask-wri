@@ -160,11 +160,19 @@ html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"] { backgrou
 /* text colour set explicitly: the document pop-up is drawn outside the page, so it cannot inherit it */
 .src-title, .src-section, .passage, .q-bubble, .tile-n, .found-title, .c-title, .hero-title, .found-note { color: var(--ink); }
 
-/* ---- empty state ---- */
-.hero { padding: 8vh 0 18px; }
-.hero-title { font-family: var(--serif); font-size: 2rem; font-weight: 600; margin-bottom: 8px; }
-.hero-sub { color: var(--muted); max-width: 40rem; }
+/* ---- start screen: the question box is the centrepiece ---- */
+.st-key-home { max-width: 780px; margin: 0 auto; padding-top: 10vh; }
+.hero-title { font-family: var(--serif); font-size: 2.5rem; font-weight: 600; line-height: 1.15; text-align: center; margin-bottom: 10px; }
+.hero-sub { color: var(--muted); text-align: center; max-width: 36rem; margin: 0 auto 30px; }
+.st-key-home [data-testid="stChatInput"] { min-height: 72px; border: 2px solid var(--green) !important; border-radius: 22px;
+  background: var(--surface); box-shadow: 0 10px 30px rgba(31, 92, 69, 0.18); transition: box-shadow 0.15s; }
+.st-key-home [data-testid="stChatInput"]:focus-within { box-shadow: 0 0 0 5px var(--hover-tint), 0 10px 30px rgba(31, 92, 69, 0.22); }
+.st-key-home [data-testid="stChatInput"] textarea { font-size: 1.15rem; padding-top: 1.3rem; }
+.st-key-home [data-testid="stChatInputSubmitButton"] { background: var(--green) !important; color: #fff !important; border-radius: 14px; }
+.try-label { text-align: center; color: var(--muted); font-size: 0.85rem; margin: 26px 0 10px; }
+.st-key-home [data-testid="stBaseButton-secondary"] { border-radius: 14px; font-size: 0.92rem; }
 
 /* chat input pinned at the bottom */
 [data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] { background: var(--cream); }
-[data-testid="stChatInput"] { border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+[data-testid="stChatInput"] > div { background: transparent; border-color: transparent; border-radius: inherit; }  /* Streamlit's inner layer must not show inside the rounded border */
+[data-testid="stChatInput"] { border-radius: 16px; border: 1.5px solid var(--green-2); background: var(--surface); box-shadow: 0 4px 16px rgba(31, 92, 69, 0.12); }

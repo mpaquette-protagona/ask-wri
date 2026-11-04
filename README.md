@@ -1,83 +1,121 @@
 # AskWRI
 
-AskWRI is a chatbot that answers questions using World Resources Institute (WRI) research PDFs.
+AskWRI is a chatbot that answers questions from World Resources Institute (WRI) research PDFs, and shows its evidence.
 
-- Every answer **cites its source**: document title, pages, link (if known) and a quoted passage.
-- If the documents don't contain the answer, it says so instead of guessing.
-- It can write a **research briefing** on a topic.
-- It can map **where WRI's research has gaps** on a topic and suggest follow-up research.
+![The start screen: one large question box](docs/screenshot-start.png)
 
-It runs entirely on AWS (Amazon Bedrock, S3, DynamoDB, SQS, Lambda, AgentCore). The chat page is a small Streamlit app.
+- **Every answer cites its sources**: document, pages and a quoted passage. The quote is checked against the document text, and the source panel highlights it.
+- **It says so when the documents don't contain the answer**, instead of guessing.
+- **Research briefings**: a table of headline figures first, then the detailed briefing.
+- **Gap analysis**: what WRI's research covers on a topic, where it is thin, and what to research next.
+- **Documents sorted by relevancy**, using the vector search score (explained [below](#how-relevancy-is-scored)).
+- **Six languages for the whole page and the answers**: English, Spanish, French, Portuguese, Chinese and Hindi.
+- **Light and dark themes** (light by default).
+
+![An answer with the search summary on the left and the highlighted source passage on the right](docs/screenshot-answer.png)
+
+It runs on AWS (Amazon Bedrock, S3, S3 Vectors, DynamoDB, SQS, Lambda, AgentCore). The chat page is a Streamlit app that you run yourself.
+
+Based on the original AskWRI by [mpaquette-protagona](https://github.com/mpaquette-protagona/ask-wri).
 
 ---
 
-## Quick start: deploy it into your own AWS account
+## Contents
 
-You need Python 3.12, Terraform, the AWS CLI, and an AWS account with Amazon Bedrock model access in **us-east-1** (Claude Sonnet 5.5, Claude Haiku 5.5, Titan Text Embeddings V2). Do **not** change the region; the models are set up for `us-east-1`. Commands are PowerShell, run from the repo root.
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [The chat page](#the-chat-page)
+- [The agent](#the-agent)
+- [Configuration](#configuration)
+- [Repository layout](#repository-layout)
+- [Day-to-day tasks](#day-to-day-tasks)
+- [Troubleshooting](#troubleshooting)
+- [Known limitations](#known-limitations)
+- [Tearing it down](#tearing-it-down)
 
-### Step A: edit these values first (before running anything)
+---
 
-Find your AWS account id (12 digits) with:
+## Quick start
 
-```powershell
-aws sts get-caller-identity --profile YOUR_PROFILE --query Account --output text
+### What you need
+
+- **Python 3.12** and `pip`
+- **Terraform** 1.5 or newer (tested with 1.17)
+- The **AWS CLI**, and AWS credentials that can create the resources below (environment variables, `aws configure`, or SSO). The code uses your default credentials; to use a named profile, set `AWS_PROFILE`.
+- **Amazon Bedrock model access in `us-east-1`** for Claude Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`), Claude Haiku 5.5 (`us.anthropic.claude-haiku-5-5`) and Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`).
+- Your **PDFs in an S3 bucket** that your credentials can read.
+
+**Use `us-east-1` everywhere.** The models are set up for it and the code is pinned to it. Your shell may default to another region, which makes AWS CLI commands look in the wrong place, so set it for your session:
+
+```bash
+export AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1      # PowerShell: $env:AWS_REGION="us-east-1"; $env:AWS_DEFAULT_REGION="us-east-1"
 ```
+
+### Step A: edit these values first
 
 | # | File | Line to change | Put |
 |---|---|---|---|
-| 1 | `terraform/main.tf` | `profile = "builder"` | your AWS profile name |
-| 2 | `terraform/main.tf` | `source_bucket = "wri-bucket-6157-5871-0841"` | the S3 bucket that holds your PDFs |
-| 3 | `lambdas/sections_handler.py` | `SOURCE_BUCKET = "wri-bucket-6157-5871-0841"` | the same PDF bucket |
-| 4 | `ingest/common.py` | `SOURCE_BUCKET = ...` and `PROFILE = "builder"` | the same PDF bucket, and your profile name |
-| 5 | `app/streamlit_app.py` | `profile_name="builder"` | your profile name |
-| 6 | `docs_to_ingest.txt` | the list of keys | the PDFs you want to ingest, one S3 key per line (e.g. `2024_publications/some-file.pdf`) |
+| 1 | `terraform/main.tf` | `source_bucket = "wri-publications"` | the S3 bucket that holds your PDFs |
+| 2 | `lambdas/sections_handler.py` | `SOURCE_BUCKET = "wri-publications"` | the same bucket |
+| 3 | `ingest/common.py` | `SOURCE_BUCKET = "wri-publications"` | the same bucket |
+| 4 | `docs_to_ingest.txt` | the list of keys | the PDFs to ingest, one S3 key per line (for example `2024_publications/some-file.pdf`) |
 
-One more value you only learn later, in step 5 below: `AGENT_ARN` in `app/streamlit_app.py`.
+> **Careful with step 4.** The file ships with a list of 90 keys for the `wri-publications` bucket. Replace it with your own. If the file has no keys at all, **every PDF in the bucket is ingested**, which could be hundreds. Start with a handful.
 
-> **Careful with step A6:** if `docs_to_ingest.txt` has no keys, **every PDF in the bucket is ingested** (it could be hundreds).
+You don't need to edit anything else. The chat page learns your agent's address from an environment variable in step B6.
 
-### Step B: run these commands in order
+### Step B: run these in order
 
-**1. Install the Python packages**
-```powershell
+All commands run from the repository root. They are the same in bash and PowerShell, except where noted.
+
+**1. Create a virtual environment and install the packages**
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate          # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-**2. Package the agent.** This builds `agent/agent_code.zip` (the agent code plus its libraries, for AgentCore's Linux machines). Terraform uploads it in the next step.
-```powershell
+**2. Package the agent.** This builds `agent/agent_code.zip`: the agent code plus its libraries, downloaded for AgentCore's Linux ARM64 machines (not for your computer). Terraform uploads it in the next step.
+
+```bash
 python agent/build_zip.py
 ```
 
-**3. Create everything in AWS**: the tables, vector index, buckets, queues, Lambdas and the AgentCore agent. Type `yes` when asked. It takes a few minutes.
-```powershell
+**3. Create everything in AWS**: tables, vector index, buckets, queues, Lambdas and the AgentCore agent. Type `yes` when asked. It takes a few minutes.
+
+```bash
 cd terraform
 terraform init
 terraform apply
 cd ..
 ```
 
-**4. Ingest your PDFs.** This only queues them; the Lambdas then work in the background (about 20 to 40 seconds per PDF, plus about a minute for embedding).
-```powershell
+**4. Ingest your PDFs.** This only queues them. The Lambdas then work in the background, from about 20 seconds for a short PDF to a few minutes for a long one.
+
+```bash
 python ingest/1_start_ingestion.py
 ```
 
-**5. Point the chat page at your agent.** Print the agent's ARN:
-```powershell
-cd terraform
-terraform output -raw agent_runtime_arn
-cd ..
-```
-Paste the result into `AGENT_ARN = "..."` in `app/streamlit_app.py`.
+Wait until the work is finished. Both queues should show 0 messages and the documents table should hold one row per PDF (see [Checking ingestion progress](#checking-ingestion-progress)).
 
-**6. Open the chat page**
-```powershell
+**5. Add the resource type, subtype and page counts** (optional, but it gives the "Report", "Working Paper" labels and "page 9 of 52" in the page). Run it after ingestion has finished. It only updates documents that exist, and skips the rest.
+
+```bash
+python ingest/2_backfill_metadata.py
+```
+
+The values come from `ingest/doc_metadata.json`, keyed by S3 key, and cover the 90 shipped documents. For other PDFs, add entries in the same format. Documents without an entry still work and show as "Other".
+
+**6. Open the chat page.** Print the agent's address, give it to the page, and start it:
+
+```bash
+terraform -chdir=terraform output -raw agent_runtime_arn
+export AGENT_ARN="<paste the arn here>"      # PowerShell: $env:AGENT_ARN="<paste the arn here>"
 streamlit run app/streamlit_app.py
 ```
-Go to http://localhost:8501. Try the example questions further down.
 
-**After you change `agent/agent.py` or `agent/labels.py`:** run `python agent/build_zip.py` and then `terraform apply` again (from `terraform/`). Terraform uploads the new zip and updates the agent.
-
-The rest of this README explains how everything works and covers details such as re-ingesting, running the agent locally, and tearing down.
+Go to http://localhost:8501. Type a question in the big box, or click one of the examples.
 
 ---
 
@@ -91,6 +129,7 @@ INGESTION  (turns PDFs into searchable data)
      ▼
   Lambda "askwri-sections"
      • Claude Haiku reads the whole PDF and splits it into English sections
+       (non-English documents are translated; the original language is recorded)
      • Claude picks tags, regions and topics, but ONLY from fixed lists (lambdas/labels.py)
      • saves one text file per section in S3
      • saves the document's details in DynamoDB
@@ -103,133 +142,225 @@ INGESTION  (turns PDFs into searchable data)
 
 CHAT
 
-  Streamlit page  →  AgentCore Runtime  →  agent/agent.py
-        orchestrator
-          ├─ research_agent  (answers questions and writes briefings)
-          └─ gaps_agent      (what is covered, where it is thin, what to research next)
+  Streamlit page ──► AgentCore Runtime ──► agent/agent.py
+   (your computer)                          the page's mode picks the agent:
+                                              Ask question / Research briefing ─► research agent
+                                              Find gaps ───────────────────────► gaps agent
 ```
 
-**The key idea:** chunks are only used to *find* the right place. The agent answers from the *whole section* the chunk came from, which is stored as a text file in S3.
+**The key idea:** chunks are only used to *find* the right place. The agent answers from the *whole section* a chunk came from, which is stored as a text file in S3.
 
-### What the agent can do
+---
+
+## The chat page
+
+| Where | What |
+|---|---|
+| **Start screen** | A large question box in the middle of the page, with three examples below it. |
+| **Left menu** | Ask a question, Research briefing, Find gaps, and your recent questions. Click the **AskWRI** logo to go back to the start screen. |
+| **Top right** | A language dropdown (it shows only the chosen language) and a light/dark switch (sun and moon). |
+| **Answer** | A "What the search found" card (documents retrieved and cited, publication years, document languages, documents by type), then the answer with numbered citation chips. |
+| **View all N documents** | Every retrieved document, most relevant first, with its relevancy and its passages. Documents the answer did not use are marked "Not cited". |
+| **Source panel** | On the right, only after an answer has cited sources. It shows the passage with the supporting quote highlighted and a status: *verified in document text*, *verified in translated text*, or *quote not found in text*. Pick another source with the chips under the answer. |
+| **Turn into briefing** | Re-runs a question as a research briefing. |
+
+**Language.** The language you pick sets the whole page *and* the language the answer is written in. Quotes stay in the language of the passage they come from. Documents that were not written in English are stored as an English translation, so their passages are shown in English, with a note saying so.
+
+**Answer times.** In testing, questions took about 10 to 30 seconds, briefings about 25 seconds, and gap analyses about 40 seconds.
+
+---
+
+## The agent
+
+### What it can do
 
 | Tool | What it does |
 |---|---|
-| `search_wri` | Finds the most relevant sections. Give a text query (semantic search) and/or filters: `region`, `topic`, `tag`, or `document` (a document id). Returns up to 5 sections per call. |
-| `list_documents` | Lists the documents in the library (id, title, year, regions, topics, tags), optionally filtered by tag, region or topic. Used by the gaps agent to see what exists. |
+| `search_wri` | Finds the most relevant sections. Give a text query (semantic search) and/or filters: `region`, `topic`, `tag`, or `document` (a document id). Returns up to 5 sections per call, best match first. |
+| `list_documents` | Lists the documents in the library (id, title, year, regions, topics, tags). The gaps agent uses it to see what exists. |
 
-Limits per question: each sub-agent can search at most 5 times, a section is never given to the agent twice, and citation numbers are unique. The allowed values for `region`, `topic` and `tag` are built into the tool definitions, so the agent can't invent one.
+Limits per question: the research agent searches at most 5 times and the gaps agent at most 12 times, a section is never given to the agent twice, and citation numbers are unique. The allowed values for `region`, `topic` and `tag` are built into the tool definitions, so the agent cannot invent one.
+
+The agent remembers the last four questions of a conversation, so follow-ups such as "what about Uganda?" work. That memory lives in the running session. AgentCore ends a session after 15 minutes without use, and the memory goes with it.
+
+### How relevancy is scored
+
+The vector search returns the closest chunks with a cosine distance. AskWRI turns that into a similarity:
+
+```
+similarity = 1 - cosine distance          (1.0 means identical)
+```
+
+- A **section's** relevancy is the similarity of its best-matching chunk.
+- A **document's** relevancy is the relevancy of its best section.
+- Documents and sections are sorted by it, highest first, and shown as a percentage.
+
+The score measures how close the text is to your question, not whether the text is correct. In testing, on-topic questions scored 70 to 85 % for their best passage, and an unrelated question scored about 15 %. The search always returns its closest matches, even weak ones, which is why a document can be retrieved but not cited.
+
+### How citations are checked
+
+The model writes the answer with `[n]` markers and, at the end, one short quote per cited source. The agent then:
+
+1. takes titles, pages and passages from what the search tool returned, never from the model's text;
+2. looks for each quote inside the passage it claims to come from;
+3. reports each source as verified or not, and highlights the matching text.
+
+### Calling the agent directly
+
+The page sends this JSON to the agent:
+
+```json
+{
+  "prompt": "What does WRI say about food loss and waste in Kenya?",
+  "mode": "ask",
+  "language": "English",
+  "filters": {"regions": ["Africa"], "languages": ["en"]}
+}
+```
+
+`mode` is `ask`, `briefing` or `gaps`. `language` is optional. `filters` is optional and can hold `regions`, `topics`, `subtypes`, `resource_types` and `languages`: values inside one filter are alternatives, different filters must all match. The page does not use filters at the moment.
+
+The reply holds `answer` (the raw text), `body` (the answer without the quotes block), `sources` (one entry per retrieved section: title, year, pages, passage, quote, `cited`, `verified`, `relevancy`), `documents` (the same sources grouped by document and sorted by relevancy) and `stats`.
 
 ---
 
-## What's in this repository
+## Configuration
+
+| Setting | Where | Default | Purpose |
+|---|---|---|---|
+| `AGENT_ARN` | environment | a placeholder containing `account_id` | The hosted agent the page talks to. Set it to `""` to use a local agent. |
+| `LOCAL_URL` | environment | `http://localhost:8080/invocations` | Where a local agent listens (only used when `AGENT_ARN` is `""`). |
+| `AWS_REGION` | environment | none | Keep `us-east-1` for AWS CLI commands. |
+| `AWS_PROFILE` | environment | none | Use a named AWS profile instead of the default credentials. |
+| Streamlit theme | `.streamlit/config.toml` | cream and green | Base colours. The dark theme is `app/style_dark.css`. |
+
+---
+
+## Repository layout
 
 ```
-README.md                 this file
-SPEC.md                   the full build specification (the source of truth)
-requirements.txt          Python packages for the scripts and the Streamlit app
-docs_to_ingest.txt        which PDFs to ingest (one S3 key per line; empty = ALL PDFs)
-terraform/                all infrastructure as code (tables, buckets, queues, Lambdas, the agent, IAM)
+README.md                  this file
+docs/                      screenshots used in this README
+requirements.txt           Python packages for the scripts and the chat page
+docs_to_ingest.txt         which PDFs to ingest (one S3 key per line; empty = ALL PDFs)
+.streamlit/config.toml     Streamlit theme
+terraform/                 all infrastructure as code (tables, buckets, queues, Lambdas, the agent, IAM)
 lambdas/
-  sections_handler.py     Lambda 1: PDF -> section text files + metadata
-  embed_handler.py        Lambda 2: section -> chunks -> vectors
-  labels.py               the allowed tags, regions and topics
+  sections_handler.py      Lambda 1: PDF -> section text files + metadata
+  embed_handler.py         Lambda 2: section -> chunks -> vectors
+  labels.py                the allowed tags, regions and topics
 ingest/
-  common.py               settings and helper to read docs_to_ingest.txt
-  1_start_ingestion.py    sends one SQS message per PDF
+  common.py                settings and the reader for docs_to_ingest.txt
+  1_start_ingestion.py     sends one SQS message per PDF
+  2_backfill_metadata.py   adds resource type, subtype and page counts to the documents table
+  doc_metadata.json        those values for the 90 shipped documents
 agent/
-  agent.py                the chat agent (runs on AgentCore)
-  build_zip.py            packages the agent into agent_code.zip for Terraform
-  labels.py               copy of lambdas/labels.py (keep them identical!)
-  requirements.txt        packages the deployed agent needs
+  agent.py                 the chat agent (runs on AgentCore)
+  passages.py              finds and checks the quotes in the model's answer
+  build_zip.py             packages the agent into agent_code.zip for Terraform
+  labels.py                copy of lambdas/labels.py (keep them identical!)
+  requirements.txt         packages the deployed agent needs
 app/
-  streamlit_app.py        the chat page
+  streamlit_app.py         the chat page: layout and behaviour
+  ui.py                    builds the HTML of the cards and the source panel
+  i18n.py                  all interface text in six languages
+  style.css                styling (light theme)
+  style_dark.css           styling added on top for the dark theme
 ```
 
 ---
 
-## Before you start
+## Day-to-day tasks
 
-You need:
+### Checking ingestion progress
 
-- **Python 3.12** and `pip`
-- **Terraform** (1.5 or newer)
-- An **AWS account** with permission to create the resources above, and an AWS CLI profile (the code uses the name `builder`; change it in step A if yours is different, e.g. create it with `aws configure --profile builder`). The region used everywhere is **`us-east-1`**.
-- **Amazon Bedrock model access** in `us-east-1` for: Claude Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`), Claude Haiku 5.5 (`us.anthropic.claude-haiku-5-5`) and Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`).
-- The PDFs in an S3 bucket your profile can read (the original project used `wri-bucket-6157-5871-0841`, folder `2024_publications/`). Each PDF must be under 4.5 MB.
+```bash
+# messages waiting or being worked on (both should reach 0 and 0)
+for q in askwri-pdf-queue askwri-section-queue; do
+  aws sqs get-queue-attributes --queue-url "$(aws sqs get-queue-url --queue-name $q --query QueueUrl --output text)" \
+    --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible --query Attributes
+done
 
-Commands below are for **PowerShell** on Windows.
+# documents saved so far
+aws dynamodb scan --table-name askwri-documents --select COUNT --query Count
+```
+
+You can also read the CloudWatch logs of the `askwri-sections` and `askwri-embed` Lambdas.
+
+**Re-ingesting a document replaces everything about it.** Run the ingest script again with the same key and the old vectors, section files and document details are rebuilt from scratch. A `source_url` you typed into the DynamoDB console, and the subtype and page count from the backfill script, are kept.
+
+### Changing the agent
+
+After you edit `agent/agent.py`, `agent/passages.py` or `agent/labels.py`:
+
+```bash
+python agent/build_zip.py
+terraform -chdir=terraform apply
+```
+
+Terraform sees the new zip, uploads it and updates the agent.
+
+### Changing the page
+
+Edit the files in `app/` and the page reloads. Restart `streamlit run` after editing `ui.py` or `i18n.py`, because Streamlit keeps those loaded.
+
+**Adding a language.** In `app/i18n.py`: add it to `UI_LANGUAGES` and `ANSWER_LANGUAGE`, add a full block to `TEXT` (copy the English one), and add its entries to `VALUES` for document types and document-language names.
+
+**Linking to the original documents.** Source panels show an "Open the document" button when a document has a `source_url`. Fill it in with the DynamoDB console or a script.
+
+### Changing the tags, regions or topics
+
+Edit the lists in `lambdas/labels.py` and copy the **identical** file to `agent/labels.py`. Then run `python agent/build_zip.py` and `terraform apply` (this updates both the Lambda and the agent), and re-ingest the documents so they get the new labels.
+
+### Running the agent on your own computer
+
+Terminal 1:
+
+```bash
+python agent/agent.py          # serves on http://localhost:8080
+```
+
+Terminal 2:
+
+```bash
+export AGENT_ARN=""            # PowerShell: $env:AGENT_ARN=""
+streamlit run app/streamlit_app.py
+```
+
+Port 8080 must be free. If something else uses it, set `LOCAL_URL` to wherever your agent is reachable.
 
 ---
 
-## The steps in more detail
+## Troubleshooting
 
-The Quick start at the top is all you need to follow. This section explains what the steps do, and covers re-ingesting and running the agent on your own computer.
-
-### What `python agent/build_zip.py` does
-AgentCore runs the agent on its own Linux ARM64 machines, so the agent's Python libraries have to be downloaded for that platform (not for your PC) and zipped together with `agent.py` and `labels.py`. The script does exactly that and writes `agent/agent_code.zip` (about 25 MB). Run it again whenever you change `agent/agent.py` or `agent/labels.py`, then run `terraform apply`. Terraform sees the new zip, uploads it, and updates the agent.
-
-### What `terraform apply` creates
-The DynamoDB table (document details), the S3 Vectors bucket and index (searchable chunks), the S3 bucket for section text files, the two SQS queues, the two Lambdas with their permissions, an S3 bucket for the agent's code zip, the agent's IAM role, and the AgentCore agent itself (`askwri_agent`).
-
-### Choosing which PDFs to ingest
-List one S3 key per line in [docs_to_ingest.txt](docs_to_ingest.txt), for example:
-
-```
-2024_publications/2024-energy-efficiency-briefing-EN.pdf
-2024_publications/2024-ccg-year-in-review.pdf
-```
-
-> **Careful:** if the file has no keys, **every PDF in the bucket is ingested** (330 PDFs). Start with a handful.
-
-Each PDF must be small enough to send to the model in one piece (under 4.5 MB).
-
-### Ingesting
-`python ingest/1_start_ingestion.py` only sends messages. The Lambdas do the work in the background, roughly 20 to 40 seconds per PDF, and the section embedding finishes about a minute after that. To watch progress, open the CloudWatch logs of the `askwri-sections` and `askwri-embed` Lambdas, or look at the message counts of the `askwri-pdf-queue` and `askwri-section-queue` queues in the SQS console.
-
-**Re-ingesting a document replaces everything about it.** Run the script again with the same key and the old vectors, section files and document details are deleted and rebuilt from scratch. The one thing kept is a `source_url` you filled in by hand in the DynamoDB console.
-
-### Running the agent on your own computer (optional)
-Instead of the hosted agent, you can run it locally. Terminal 1:
-
-```powershell
-$env:AWS_PROFILE="YOUR_PROFILE"
-python agent/agent.py
-```
-
-It serves on `http://localhost:8080`. Terminal 2: set `AGENT_ARN = ""` at the top of [app/streamlit_app.py](app/streamlit_app.py) so the chat page talks to your local agent, then run `streamlit run app/streamlit_app.py`.
-
----
-
-## Example questions
-
-- *"How fast did China's energy intensity fall during the 11th Five-Year Plan?"* (a normal question, answered with citations)
-- *"Write a briefing on carbon pricing."* (a research briefing)
-- *"Where are the gaps in WRI's research on energy efficiency?"* (the gaps agent, with "Suggestion:" lines)
-- *"What is WRI's position on cryptocurrency?"* (not in the documents, so it answers: "I couldn't find this in the WRI documents I have access to.")
-
----
-
-## Changing the tags, regions or topics
-
-Edit the lists in [lambdas/labels.py](lambdas/labels.py) and copy the **identical** file to [agent/labels.py](agent/labels.py). Then run `python agent/build_zip.py` and `terraform apply` (this updates both the Lambda and the agent), and re-ingest the documents so they get the new labels.
+| What you see | Likely cause and fix |
+|---|---|
+| The page says *The agent did not answer (…)* | `AGENT_ARN` is missing, still has `account_id` in it, or points at another region. Print the right one with `terraform -chdir=terraform output -raw agent_runtime_arn`. |
+| AWS CLI commands return nothing or *does not exist* | Your shell is in another region. Set `AWS_REGION=us-east-1`. |
+| A PDF never appears, and the sections Lambda log says *Model returned bad JSON twice* | The document is long enough that the model's output was cut off. The Lambda allows 64,000 output tokens (`maxTokens` in `lambdas/sections_handler.py`). Failed messages expire after an hour. |
+| *Access denied* when ingesting | `source_bucket` and `SOURCE_BUCKET` don't name a bucket your account can read, or the three values in Step A don't match. |
+| A change to `ui.py` or `i18n.py` has no effect | Restart `streamlit run`. |
+| Chinese or Hindi shows as empty boxes | The device has no font for that script. Install one. |
 
 ---
 
 ## Known limitations
 
-- **No login.** Anyone who can reach the Streamlit page can use it. Don't expose it publicly as is.
-- **No dead-letter queue.** If a PDF keeps failing, SQS retries it until the message expires (1 hour) and then drops it. Check the Lambda logs if a document never appears.
-- **Search finds the closest matches, it can't prove something is absent.** The gaps agent combines the document inventory (`list_documents`) with searches, but "gaps" always means gaps within the documents that were ingested.
+- **No login.** Anyone who can reach the Streamlit page can use it, with the AWS permissions of whoever started it. Don't expose it publicly as is.
+- **No dead-letter queue.** If a PDF keeps failing, SQS retries it until the message expires (1 hour) and then drops it.
+- **Search finds close matches, it can't prove something is absent.** "Gaps" always means gaps within the documents that were ingested.
+- **There is no minimum relevancy.** Weak matches are returned, and shown as "Not cited" when the answer doesn't use them.
 - **Tables and figures are ignored** during ingestion; only text is searchable.
-- **Large PDFs:** one PDF must fit in one model call. Very long documents may be cut off.
-- **Re-ingesting scans the whole vector index** to find the old vectors, which is fine for hundreds of documents but gets slower as the index grows.
+- **Long PDFs** must fit in one model call, and their text in one model reply. PDFs up to about 19 MB and 150 pages were ingested in testing, but very long documents may still be cut off.
+- **Quotes are checked against the stored text.** For non-English documents that is the English translation, not the original wording.
+- **The page's styling depends on Streamlit's internal element names.** It was built and tested with Streamlit 1.66, and an upgrade may need small CSS fixes.
+- **Re-ingesting scans the whole vector index** to find the old vectors. That is fine for hundreds of documents but gets slower as the index grows.
 
 ---
 
 ## Tearing it down
 
-```powershell
+```bash
 cd terraform
 terraform destroy          # type "yes"; removes everything, including the stored documents and vectors
 ```

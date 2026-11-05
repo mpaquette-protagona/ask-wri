@@ -27,10 +27,16 @@ RESEARCH_MAX_SEARCHES = 5  # search_wri calls the research agent may make per qu
 GAPS_MAX_SEARCHES = 10     # the gaps agent needs more, because it reads many documents
 
 ORCHESTRATOR_PROMPT = """You are AskWRI, the front desk for World Resources Institute (WRI) research.
-Send questions and briefing requests to research_agent. Send questions about coverage, gaps,
-or what WRI has not yet studied to gaps_agent. Include relevant context from earlier in the
-conversation in the request you pass on. Return the agent's answer to the user unchanged,
-including every citation. Never answer from your own knowledge."""
+Route the request to exactly one sub-agent and then STOP:
+- Questions and briefing requests -> research_agent.
+- Questions about coverage, gaps, what is thin, or what WRI has not yet studied -> gaps_agent.
+Include relevant context from earlier in the conversation in the request you pass on.
+
+CRITICAL: The sub-agent's reply IS the final answer. Output it to the user EXACTLY as returned,
+character for character, including every heading, [Observation]/[Evidence]/[Suggestion] label,
+citation, and the Sources list. Do NOT summarize it, rephrase it, add a preamble like "Here is the
+answer", comment on it, or say anything about a map or charts. Do NOT add or remove anything.
+Never answer from your own knowledge."""
 
 RESEARCH_PROMPT = """You answer ONLY from WRI documents returned by the search_wri tool. Never use outside knowledge.
 - Search before answering. Use the region or tag filter when the user names a region or topic.
@@ -53,16 +59,12 @@ RESEARCH_PROMPT = """You answer ONLY from WRI documents returned by the search_w
 
 GAPS_PROMPT = """You map WRI's research coverage on a topic, using only the documents loaded in this library.
 First call list_documents with the topic, region or tag filter that fits the request, so you see
-every loaded document on it. Call show_coverage_dashboard (once) ONLY when the user asks about the
-library as a whole (what it covers overall, which topics or regions are covered or missing) or asks
-for a dashboard, overview or chart of it. Do NOT call it for a gap question about one narrow topic;
-the written answer is enough there. It draws the number of loaded documents by topic, region and year
-from the library's metadata and returns those counts (they need no [n] citation; a zero is a gap in
-the loaded set). Then use search_wri (its document filter takes a document id from list_documents)
-to read those documents, the most relevant first, until you reach your search limit. Also search by
-query for anything those documents do not cover. Call show_chart only if the user asks for a chart,
-or comparable numbers stated in the sources make a trend or comparison clearer (never estimates).
-When you are done, call suggest_followups with 2-3 natural next questions.
+every loaded document on it; the counts by region and year from that list are your coverage numbers
+(a zero is a gap in the loaded set). Then use search_wri (its document filter takes a document id
+from list_documents) to read the most relevant documents until you reach your search limit, and
+search by query for "<topic> future research" or "<topic> limitations" to find what WRI's authors
+say is still open. When you are done, call suggest_followups with 2-3 natural next questions.
+Write the FULL analysis as text (there is no chart; the text is the whole answer).
 
 Label every claim so the reader always knows what kind of statement it is. Prefix each bullet with:
   [Observation] - a coverage count or fact taken from list_documents / show_coverage_dashboard. No [n].
@@ -70,13 +72,24 @@ Label every claim so the reader always knows what kind of statement it is. Prefi
   [Suggestion]  - a direction YOU propose. It is model-generated, not a WRI finding.
 Never present an [Observation] or a [Suggestion] as if it were a cited finding.
 
-Reply in exactly this order:
-1. "Summary": three short bullet lines.
+HARD RULES (do not break these):
+- ALWAYS output all six sections below, with their exact headings, even if some are short.
+- NEVER describe your own process (do not write sentences like "I mapped the gaps" or "I read
+  seven documents"). Write the answer itself, not commentary about how you produced it.
+- "Where coverage is thin" must ALWAYS contain at least two rows naming a thin or missing area,
+  based on the coverage counts (a region, time period, or sub-topic with few or zero documents).
+- Every section must have content. If a search found nothing for a section, say so in one short
+  line, then continue to the next section. Do not stop early.
+
+Reply in exactly this order, using these headings:
+1. "Summary": three short bullet lines stating the topic, how many documents cover it, and the
+   single clearest gap.
 2. One italic line: this only covers the documents loaded in this library, so a gap means "not in
    the loaded set", not that WRI has not covered it. Never say "WRI hasn't covered this".
 3. "What WRI has covered": [Observation] and [Evidence] bullets. Cite evidence with [n]; sections
    from the same document share one number.
 4. "Where coverage is thin": a markdown table with the columns Area, What is thin or missing, Evidence.
+   At least two rows. Each row names a specific thin area and the count that shows it.
 5. "Suggested research directions": [Suggestion] bullets only. Anchor each to cited work above, e.g.
    "[Suggestion] Adapt the method in [2] to Latin America." Each must be buildable from the work you cited.
 6. A "Sources" heading with a markdown bullet list, one bullet per document: [n] Title, its page
@@ -104,7 +117,7 @@ state = {}
 def reset_state():
     """Called at the start of every question."""
     state.update(searches=0, max_searches=RESEARCH_MAX_SEARCHES, seen=set(), doc_numbers={},
-                 visuals=[], followups=[], read=[], pdfs={},  # these are shown on the chat page (pdfs: doc id -> link)
+                 visuals=[], followups=[], read=[], pdfs={}, subagent_answer="",  # pdfs: doc id -> link
                  language="")  # "" = all languages; otherwise only documents in this language are used
 
 
@@ -337,15 +350,21 @@ def research_agent(request: str) -> str:
     """Answer a question about WRI research, or write a research briefing, with citations."""
     state.update(searches=0, max_searches=RESEARCH_MAX_SEARCHES)  # each sub-agent gets its own searches
     tools = [search_wri, show_chart, suggest_followups]
-    return str(Agent(model=MODEL, system_prompt=RESEARCH_PROMPT, tools=tools)(request))
+    out = str(Agent(model=MODEL, system_prompt=RESEARCH_PROMPT, tools=tools)(request))
+    state["subagent_answer"] = out  # the real answer, so invoke() can bypass orchestrator rephrasing
+    return out
 
 
 @tool
 def gaps_agent(topic: str) -> str:
     """Map what WRI has published on a topic and suggest gaps and follow-up research."""
     state.update(searches=0, max_searches=GAPS_MAX_SEARCHES)  # each sub-agent gets its own searches
-    tools = [search_wri, list_documents, show_coverage_dashboard, show_chart, suggest_followups]
-    return str(Agent(model=MODEL, system_prompt=GAPS_PROMPT, tools=tools)(topic))
+    # No dashboard/chart tools here: they pull the substance into a visual and leave the text empty.
+    # The labeled written analysis IS the Journey-3 deliverable, so force it into the text answer.
+    tools = [search_wri, list_documents, suggest_followups]
+    out = str(Agent(model=MODEL, system_prompt=GAPS_PROMPT, tools=tools)(topic))
+    state["subagent_answer"] = out  # the real answer, so invoke() can bypass orchestrator rephrasing
+    return out
 
 
 orchestrator = Agent(model=MODEL, system_prompt=ORCHESTRATOR_PROMPT, tools=[research_agent, gaps_agent])
@@ -361,7 +380,10 @@ def invoke(payload):
     reset_state()  # new question: reset the call counts and the "already returned" list
     if payload.get("language") in LANGUAGES:  # the chat page's language selector ("" = all languages)
         state["language"] = payload["language"]
-    answer = str(orchestrator(payload["prompt"]))
+    orch_text = str(orchestrator(payload["prompt"]))
+    # The orchestrator is only a router. Prefer the sub-agent's real, labeled answer over the
+    # orchestrator's rephrasing (which otherwise collapses to "I've written the map above").
+    answer = state.get("subagent_answer") or orch_text
     # Also report the evidence behind the answer, any charts or dashboard, and suggested follow-ups
     # (the chat page shows these)
     return {"answer": answer, "documents": len(state["doc_numbers"]), "sections": len(state["seen"]),

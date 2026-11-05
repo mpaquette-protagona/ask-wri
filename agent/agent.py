@@ -67,7 +67,7 @@ say is still open. When you are done, call suggest_followups with 2-3 natural ne
 Write the FULL analysis as text (there is no chart; the text is the whole answer).
 
 Label every claim so the reader always knows what kind of statement it is. Prefix each bullet with:
-  [Observation] - a coverage count or fact taken from list_documents / show_coverage_dashboard. No [n].
+  [Observation] - a coverage count or fact taken from the list_documents counts. No [n].
   [Evidence]    - a cited passage from a document. End it with [n] and list it under Sources.
   [Suggestion]  - a direction YOU propose. It is model-generated, not a WRI finding.
 Never present an [Observation] or a [Suggestion] as if it were a cited finding.

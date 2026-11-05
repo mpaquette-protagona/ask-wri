@@ -1,84 +1,82 @@
-"""The AskWRI agent. An orchestrator hands questions to a research agent or a gaps agent.
-They find WRI sections with a search tool (semantic search plus metadata filters), and can also
-show charts, a library coverage dashboard, and suggested follow-up questions on the chat page.
+"""The AskWRI agent. The page's mode picks a research agent (questions, briefings) or a gaps agent.
+They find WRI sections with a search tool (semantic search plus metadata filters).
 Runs on AgentCore Runtime.
 """
 import json
 import os
+import re
+import threading
+import time
 import urllib.parse
-from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, Optional
 
 import boto3
-from botocore.config import Config
 from strands import Agent, tool
 from strands.models import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-from labels import LANGUAGES, REGIONS, TAGS, TOPICS
+from labels import REGIONS, TAGS, TOPICS
+from passages import cited_numbers, excerpt, locate_quote, parse_quotes, split_answer
 
 # ---- Constants ----
+# Terraform passes the region to the deployed agent in ASKWRI_REGION. On your own computer it falls back
+# to AWS_REGION, then your AWS_DEFAULT_REGION / profile region.
+REGION = (os.environ.get("ASKWRI_REGION") or os.environ.get("AWS_REGION")
+          or boto3.Session().region_name or "us-east-1")
 DOCS_TABLE = "askwri-documents"
 VECTOR_BUCKET = "askwri-vectors"
 VECTOR_INDEX = "askwri-index"
 CHAT_MODEL = "us.anthropic.claude-sonnet-5-5"
 EMBED_MODEL = "amazon.titan-embed-text-v2:0"
-RESEARCH_MAX_SEARCHES = 5  # search_wri calls the research agent may make per question
-GAPS_MAX_SEARCHES = 10     # the gaps agent needs more, because it reads many documents
+MAX_SEARCHES = 5        # search_wri calls allowed per question for the research agent
+GAPS_MAX_SEARCHES = 12  # the gaps agent must read many documents, so it gets more
 
-ORCHESTRATOR_PROMPT = """You are AskWRI, the front desk for World Resources Institute (WRI) research.
-Send questions and briefing requests to research_agent. Send questions about coverage, gaps,
-or what WRI has not yet studied to gaps_agent. Include relevant context from earlier in the
-conversation in the request you pass on. Return the agent's answer to the user unchanged,
-including every citation. Never answer from your own knowledge."""
+SOURCES_RULES = """Citations:
+- End every factual sentence with a citation like [1]. Use only numbers from the [SOURCE n] blocks you were given.
+- Do NOT write a source list or titles of sources at the end. Instead, finish with a line that says exactly
+  "=== QUOTES ===" (never translate or change it), then one line for each source number you cited, in this form:
+  [n] "short quote copied exactly from that source's text"
+  Copy the quote letter for letter, in the source's own language, even when your answer is in another language.
+  The quote must be the passage that supports the claim, at most 160 characters. Write nothing after the quotes."""
 
 RESEARCH_PROMPT = """You answer ONLY from WRI documents returned by the search_wri tool. Never use outside knowledge.
-- Search before answering. Use the region or tag filter when the user names a region or topic.
-- End every factual sentence with a citation like [1]. Sections from the same document share one
-  number. Finish with a "Sources" heading and a markdown bullet list (start every line with "- "),
-  one bullet per document: [n] Title, its page ranges (join several with commas; write a single page
-  as "26", not "26-26"), the URL only if the source has one, then a short quoted passage that
-  supports the claim.
+- Search before answering. Use the region, topic or tag filter when the user names one.
 - If search_wri returns NO_RESULTS, or the sections do not actually answer the question, reply
   exactly: "I couldn't find this in the WRI documents I have access to." and stop. Do not guess.
-- If the user asks for a briefing, use this format: Summary (3-4 sentences), Key findings
-  (bullets, each cited), Related WRI publications (titles and links), Sources.
-- Call show_chart only when it truly helps: the user asks for a chart, graph or visual, or asks about
-  a trend, comparison or ranking and the sources state three or more comparable numbers (for example
-  by year, place or category). Never chart a single number, a simple fact, a list, or a descriptive
-  answer. At most one chart. Chart ONLY numbers that appear in the sources, exactly as stated, never
-  estimates, and say in the note which source numbers they come from.
-- After an answer (not after the "couldn't find" reply), call suggest_followups with 2-3 natural next
-  questions that the WRI documents could answer: one drill-down and one comparison."""
+- If the user asks for a briefing, use exactly this structure, in this order:
+  ## At a glance
+  A markdown table with columns Figure | What it measures | Source, holding 4 to 6 headline numbers that
+  appear in the sections you were given (each with its [n]). Under the table, one line:
+  "Based on N WRI documents, FIRST YEAR to LAST YEAR, REGIONS", built only from the Year and Regions
+  fields of the documents you actually cite. Never invent or round a number.
+  ## Briefing
+  Summary (3-4 sentences), then Key findings (bullets, each cited), then Related WRI publications
+  (titles, with links only when a URL exists).
+  Then the quotes block described below.
+""" + SOURCES_RULES
 
-GAPS_PROMPT = """You map WRI's research coverage on a topic, using only the documents loaded in this library.
-First call list_documents with the topic, region or tag filter that fits the request, so you see
-every loaded document on it. Call show_coverage_dashboard (once) ONLY when the user asks about the
-library as a whole (what it covers overall, which topics or regions are covered or missing) or asks
-for a dashboard, overview or chart of it. Do NOT call it for a gap question about one narrow topic;
-the written answer is enough there. It draws the number of loaded documents by topic, region and year
-from the library's metadata and returns those counts (they need no [n] citation; a zero is a gap in
-the loaded set). Then use search_wri (its document filter takes a document id from list_documents)
-to read those documents, the most relevant first, until you reach your search limit. Also search by
-query for anything those documents do not cover. Call show_chart only if the user asks for a chart,
-or comparable numbers stated in the sources make a trend or comparison clearer (never estimates).
-When you are done, call suggest_followups with 2-3 natural next questions.
-Reply in exactly this order:
-1. "Summary": three short bullet lines.
-2. One italic line: this only covers the documents loaded in this library, so a gap means "not in
-   the loaded set", not that WRI has not covered it. Never say "WRI hasn't covered this".
-3. "What WRI has covered": cited, using [n] citations. Sections from the same document share one
-   number.
-4. "Where coverage is thin": a markdown table with the columns Area, What is thin or missing, Evidence.
-5. "Suggested research directions". Start every suggestion with "Suggestion:".
-6. A "Sources" heading with a markdown bullet list, one bullet per document: [n] Title, its page
-   ranges joined with commas, the URL only if there is one."""
+GAPS_PROMPT = """You map WRI's research coverage on a topic, using ONLY the documents in this library
+(search_wri and list_documents). Never use outside knowledge.
+Method: call list_documents with the matching tag, topic or region to see every matching document. Then read
+each of them with search_wri, using its document filter, until the search limit. Make these searches together
+in one step rather than one at a time. If there are more documents than searches, name the ones you did not
+read and describe them only by title and tags.
+Length: the reply, not counting the quotes block, must be 650 words or fewer. Be brief and specific.
+Reply with exactly these parts, in this order:
+1. A line starting "**In short:**" with two or three sentences giving the main finding.
+2. A short italic line saying that gaps are relative to the documents loaded in this library, not to all of WRI's work.
+3. "## What WRI has covered": cited findings grouped under each document's bold title. At most 3 bullets per
+   document, each under 30 words and ending with [n]. For a document that is only tagged with the topic and
+   is not mainly about it, write one bullet.
+4. "## Where coverage is thin": a markdown table with columns Area | What is missing | Evidence, at most 6 rows.
+   Evidence names the documents that show it, or says no document in the library covers it. Never say
+   "WRI has not studied this"; say "not in the loaded library".
+5. "## Suggested research directions": at most 5 items, one sentence each, every item starting with "Suggestion:".
+6. The quotes block described below. Cite only the strongest sources, so that it stays short.
+""" + SOURCES_RULES
 
 # ---- AWS clients (no profile: AgentCore gives us an IAM role) ----
-# Terraform passes the region to the deployed agent in ASKWRI_REGION. When you run the agent on your
-# own computer, it falls back to AWS_REGION or your AWS_DEFAULT_REGION / profile region.
-REGION = (os.environ.get("ASKWRI_REGION") or os.environ.get("AWS_REGION")
-          or boto3.Session().region_name or "us-east-1")
 session = boto3.Session(region_name=REGION)
 brt = session.client("bedrock-runtime")
 s3v = session.client("s3vectors")
@@ -91,75 +89,91 @@ SECTIONS_BUCKET = "askwri-sections-" + session.client("sts").get_caller_identity
 
 # ---- Per-question state: call counts, sections already returned, source numbering ----
 state = {}
+LOCK = threading.Lock()  # tool calls can run at the same time, so state changes happen under this lock
+POOL = ThreadPoolExecutor(max_workers=10)  # reads the sections of one search in parallel
 
 
 def reset_state():
     """Called at the start of every question."""
-    state.update(searches=0, max_searches=RESEARCH_MAX_SEARCHES, seen=set(), doc_numbers={},
-                 visuals=[], followups=[], read=[], pdfs={},  # these are shown on the chat page (pdfs: doc id -> link)
-                 language="")  # "" = all languages; otherwise only documents in this language are used
+    state.update(searches=0, seen=set(), source_no=0, max_searches=MAX_SEARCHES,
+                 retrieved={}, allowed=None)
 
 
 reset_state()
 
 
+_docs_cache = {"at": 0.0, "by_id": {}}
+DOCS_CACHE_SECONDS = 300  # the documents table changes only when documents are (re)ingested
+
+
 def scan_documents():
-    """Return every row of the documents table (follows pagination), in the chosen language only."""
-    docs = []
-    response = docs_table.scan()
-    docs += response["Items"]
-    while "LastEvaluatedKey" in response:
-        response = docs_table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
+    """Return every row of the documents table. Cached for a few minutes: each question used to scan
+    the table again, and every section read used to do its own lookup."""
+    if time.time() - _docs_cache["at"] > DOCS_CACHE_SECONDS or not _docs_cache["by_id"]:
+        docs = []
+        response = docs_table.scan()
         docs += response["Items"]
-    if state["language"]:
-        docs = [d for d in docs if d.get("language") == state["language"]]
-    return docs
+        while "LastEvaluatedKey" in response:
+            response = docs_table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
+            docs += response["Items"]
+        _docs_cache.update(at=time.time(), by_id={d["doc_id"]: d for d in docs})
+    return list(_docs_cache["by_id"].values())
 
 
-BUCKET_REGIONS = {}  # bucket name -> region (looked up once)
+def get_doc(doc_id):
+    """One document row, from the cache (a row added in the last few minutes is fetched directly)."""
+    doc = _docs_cache["by_id"].get(doc_id)
+    if doc is None:
+        with LOCK:
+            doc = docs_table.get_item(Key={"doc_id": doc_id})["Item"]
+        _docs_cache["by_id"][doc_id] = doc
+    return doc
 
 
-def pdf_link(bucket, key):
-    """A temporary link (valid up to an hour) to the source PDF, made with this agent's permissions,
-    so the person using the chat page needs no AWS access to the PDF bucket. "" if it can't be made."""
-    if not (bucket and key):
-        return ""
-    try:
-        if bucket not in BUCKET_REGIONS:
-            headers = s3.head_bucket(Bucket=bucket)["ResponseMetadata"]["HTTPHeaders"]
-            BUCKET_REGIONS[bucket] = headers.get("x-amz-bucket-region", REGION)
-        client = session.client("s3", region_name=BUCKET_REGIONS[bucket], config=Config(signature_version="s3v4"))
-        return client.generate_presigned_url("get_object", ExpiresIn=3600, Params={
-            "Bucket": bucket, "Key": key, "ResponseContentType": "application/pdf",
-            "ResponseContentDisposition": "inline"})
-    except Exception:
-        return ""
+FACETS = {"topics": "topics", "regions": "regions", "subtypes": "subtype_label",
+          "resource_types": "resource_type", "languages": "original_language"}
 
 
-def read_section(doc_id, section_id):
-    """Read one section file from S3 and return it as a [SOURCE n] block (n is per document)."""
+def allowed_doc_ids(filters):
+    """Return the ids of documents that pass the sidebar filters, or None when no filter is set.
+    Values inside one filter are alternatives (any of them); different filters must all match."""
+    active = {name: set(values) for name, values in (filters or {}).items()
+              if name in FACETS and values}
+    if not active:
+        return None
+    allowed = set()
+    for doc in scan_documents():
+        for name, wanted in active.items():
+            have = doc.get(FACETS[name], [])
+            have = set(have) if isinstance(have, (list, set, tuple)) else {have}
+            if not (have & wanted):
+                break
+        else:
+            allowed.add(doc["doc_id"])
+    return allowed
+
+
+def read_section(number, doc_id, section_id, score, chunk_hits):
+    """Read one section file from S3 and return it as a numbered [SOURCE n] block.
+    Safe to run in several threads: it only reads, and stores its result under its own number."""
     obj = s3.get_object(Bucket=SECTIONS_BUCKET, Key=f"sections/{doc_id}/{section_id}.txt")
     info = obj["Metadata"]  # title, page_start, page_end
     text = obj["Body"].read().decode("utf-8")
-    doc = docs_table.get_item(Key={"doc_id": doc_id})["Item"]
-    state["seen"].add((doc_id, section_id))
-    if doc_id not in state["pdfs"]:  # one link per document
-        state["pdfs"][doc_id] = pdf_link(doc.get("source_bucket", ""), doc.get("s3_key", ""))
-
-    # Sections of the same document share one number, so each document is cited once
-    number = state["doc_numbers"].setdefault(doc_id, len(state["doc_numbers"]) + 1)
+    doc = get_doc(doc_id)
     first, last = info["page_start"], info["page_end"]
-    pages = first if first == last else f"{first}-{last}"  # "26", not "26-26"
-
-    state["read"].append({"source": number, "doc_id": doc_id, "section_id": section_id,
-                          "bucket": doc.get("source_bucket", ""), "s3_key": doc.get("s3_key", ""),
-                          "document": doc.get("title", doc_id),
-                          "section": urllib.parse.unquote(info["title"]), "pages": str(pages)})
-    header = [f"[SOURCE {number}] Title: {doc.get('title', doc_id)}"]
-    if doc.get("source_url"):  # leave the URL out when we don't have one
-        header.append(f"URL: {doc['source_url']}")
-    header += [f"Pages: {pages}", f"Section: {urllib.parse.unquote(info['title'])}"]
-    return " | ".join(header) + "\n" + text
+    state["retrieved"][number] = {
+        "doc": doc, "section_id": section_id, "text": text,
+        "section_title": urllib.parse.unquote(info["title"]),
+        "page_start": int(first), "page_end": int(last),
+        "score": score, "chunk_hits": chunk_hits}
+    pages = first if first == last else f"{first}-{last}"
+    return (f"[SOURCE {number}] Title: {doc.get('title', doc_id)} | "
+            f"URL: {doc.get('source_url') or 'none'} | "
+            f"Year: {doc.get('year', 'unknown')} | "
+            f"Regions: {', '.join(doc.get('regions', [])) or 'none'} | "
+            f"Topics: {', '.join(doc.get('topics', [])) or 'none'} | "
+            f"Pages: {pages} | "
+            f"Section: {urllib.parse.unquote(info['title'])}\n{text}")
 
 
 # ---- Tool 1: search ----
@@ -176,13 +190,14 @@ def search_wri(query: str = "", region: Optional[Region] = None, topic: Optional
     Give a query (semantic search), and/or filters (region, topic, tag; each limits the search
     to documents with that value; document is a document id from list_documents and limits the
     search to that one document). At least one of them is required. Returns up to 5 sections
-    you have not been given yet. The number of searches you may make is limited; the tool tells
-    you when you have reached the limit."""
+    you have not been given yet. The number of calls per question is limited."""
     if not (query or region or topic or tag or document):
         return "Give a query and/or at least one filter."
-    if state["searches"] >= state["max_searches"]:
-        return "RETRIEVAL_LIMIT_REACHED: no more searches allowed. Answer with what you have."
-    state["searches"] += 1
+    with LOCK:
+        if state["searches"] >= state["max_searches"]:
+            return "RETRIEVAL_LIMIT_REACHED: no more searches allowed. Answer with what you have."
+        state["searches"] += 1
+    scan_documents()  # make sure the document cache is filled before the section reads start
 
     # 1. Embed the query (if there is no query, embed the filter values instead)
     text = query or " ".join(v for v in (topic, region, tag, document.replace("-", " ")) if v)
@@ -200,8 +215,10 @@ def search_wri(query: str = "", region: Optional[Region] = None, topic: Optional
         filters.append({"tags": {"$eq": tag}})
     if document:
         filters.append({"doc_id": {"$eq": document}})
-    if state["language"]:  # the user limited the library to one language: always applied
-        filters.append({"language": {"$eq": state["language"]}})
+    if state["allowed"] is not None:  # sidebar filters chosen by the user
+        if not state["allowed"]:
+            return "NO_RESULTS"
+        filters.append({"doc_id": {"$in": sorted(state["allowed"])}})
     filter_kwargs = {}
     if len(filters) == 1:
         filter_kwargs["filter"] = filters[0]
@@ -215,17 +232,29 @@ def search_wri(query: str = "", region: Optional[Region] = None, topic: Optional
     if not hits:
         return "NO_RESULTS"
 
-    # 4. Unique (doc_id, section_id) pairs that we have not returned yet, max 5
-    pairs = []
+    # 4. Rank sections by relevancy. Each hit is one chunk; S3 Vectors returns its cosine distance, so the
+    #    chunk's similarity is 1 - distance. A section's relevancy is its best chunk; chunk_hits counts how many
+    #    of the top chunks fell in that section. The five best sections nobody has been given yet are returned.
+    #    Each gets its source number now, under the lock, so searches running at the same time cannot clash.
+    best, chunk_hits = {}, {}
     for hit in hits:
         pair = (hit["metadata"]["doc_id"], hit["metadata"]["section_id"])
-        if pair not in pairs and pair not in state["seen"]:
-            pairs.append(pair)
-        if len(pairs) == 5:
-            break
-    if not pairs:
+        best[pair] = max(best.get(pair, -1.0), 1.0 - hit["distance"])
+        chunk_hits[pair] = chunk_hits.get(pair, 0) + 1
+    ranked = sorted(best, key=lambda pair: (-best[pair], -chunk_hits[pair]))
+    with LOCK:
+        numbered = []
+        for pair in ranked:
+            if pair in state["seen"]:
+                continue
+            state["seen"].add(pair)
+            state["source_no"] += 1
+            numbered.append((state["source_no"], *pair, round(best[pair], 4), chunk_hits[pair]))
+            if len(numbered) == 5:
+                break
+    if not numbered:
         return "NO_NEW_RESULTS: every matching section was already returned earlier."
-    return "\n\n".join(read_section(doc_id, section_id) for doc_id, section_id in pairs)
+    return "\n\n".join(POOL.map(lambda item: read_section(*item), numbered))
 
 
 # ---- Tool 2: list documents (used by the gaps agent) ----
@@ -236,6 +265,8 @@ def list_documents(tag: Optional[Tag] = None, region: Optional[Region] = None,
     optionally filtered by tag, region or topic. Use a document id with search_wri's document filter."""
     lines = []
     for d in scan_documents():
+        if state["allowed"] is not None and d["doc_id"] not in state["allowed"]:
+            continue
         tags = list(d.get("tags", []))
         regions = list(d.get("regions", []))
         topics = list(d.get("topics", []))
@@ -250,115 +281,111 @@ def list_documents(tag: Optional[Tag] = None, region: Optional[Region] = None,
     return "\n".join(lines) or "No documents match."
 
 
-# ---- Tools that put visuals on the chat page (they only record what to show; the page draws it) ----
-def make_chart(title, chart_type, labels, series, unit="", note=""):
-    """Check a chart description and return it as a dict, or return an error message (str)."""
-    if not labels or not series or len(labels) > 30 or len(series) > 4:
-        return "Chart not added: give 1-30 labels and 1-4 series."
-    for name, values in series.items():
-        if len(values) != len(labels):
-            return f"Chart not added: series '{name}' needs exactly {len(labels)} numbers, one per label."
-    return {"chart_type": chart_type, "title": title, "labels": list(labels),
-            "series": {name: list(values) for name, values in series.items()},
-            "unit": unit, "note": note}
-
-
-@tool
-def show_chart(title: str, chart_type: Literal["bar", "barh", "line", "pie"], labels: list[str],
-               series: dict[str, list[float]], unit: str = "", note: str = "") -> str:
-    """Show a chart under your answer, but only when it helps: a trend, comparison or ranking with
-    three or more numbers, or when the user asks for a chart. Not for a single number, a simple fact
-    or a list. Use ONLY numbers that appear in the documents you were given, exactly as stated,
-    never estimates. chart_type: bar (compare categories), barh (rankings),
-    line (a trend over time), pie (shares of a whole). labels: the categories, for example years.
-    series: a dict from series name to one number per label. unit: for example "% per year".
-    note: which source numbers the data comes from, for example "Source [1]"."""
-    chart = make_chart(title, chart_type, labels, series, unit, note)
-    if isinstance(chart, str):
-        return chart
-    state["visuals"].append({"kind": "chart", **chart})
-    return "Chart added to the page."
-
-
-@tool
-def show_coverage_dashboard() -> str:
-    """Show a dashboard of what is loaded in the library: the number of documents by topic, by region
-    and by year, taken from the library's metadata. Returns the counts. A zero is a gap in the
-    loaded set. Use it only for questions about the whole library, or when the user asks for a
-    dashboard or overview. Not for a question about one narrow topic."""
-    if any(visual["kind"] == "dashboard" for visual in state["visuals"]):
-        return "The dashboard is already shown on the page. Do not call this again."
-    docs = scan_documents()
-    topic_counts = Counter(t for d in docs for t in d.get("topics", []))
-    region_counts = Counter(r for d in docs for r in d.get("regions", []))
-    year_counts = Counter(d["year"] for d in docs if d.get("year"))
-    by_topic = {t: topic_counts[t] for t in TOPICS}  # every topic, so missing ones show as 0
-    by_region = {r: region_counts[r] for r in REGIONS}
-    by_year = dict(sorted(year_counts.items()))
-
-    def chart(title, chart_type, counts):
-        return make_chart(title, chart_type, list(counts), {"Documents": list(counts.values())})
-
-    state["visuals"].append({
-        "kind": "dashboard", "title": "What the library covers",
-        "kpis": [{"label": "Documents", "value": str(len(docs))},
-                 {"label": "Topics covered", "value": f"{sum(1 for n in by_topic.values() if n)} of {len(TOPICS)}"},
-                 {"label": "Regions covered", "value": f"{sum(1 for n in by_region.values() if n)} of {len(REGIONS)}"}],
-        "charts": [chart("By topic", "barh", by_topic), chart("By region", "bar", by_region),
-                   chart("By year", "bar", by_year)],
-        "note": (f"Counts of loaded {LANGUAGES[state['language']]} documents only."
-                 if state["language"] else
-                 "Counts of loaded documents (copies in different languages count separately).")})
-    return (f"Dashboard shown. Documents: {len(docs)}. By topic: {by_topic}. "
-            f"By region: {by_region}. By year: {by_year}.")
-
-
-@tool
-def suggest_followups(questions: list[str]) -> str:
-    """Offer 2-3 natural next questions as buttons under your answer: one drill-down and one
-    comparison. Only suggest questions the WRI documents could answer."""
-    state["followups"] = [q for q in questions if q.strip()][:3]
-    return "Follow-up questions added to the page."
-
-
 MODEL = BedrockModel(model_id=CHAT_MODEL, region_name=REGION)
 
 
-@tool
-def research_agent(request: str) -> str:
-    """Answer a question about WRI research, or write a research briefing, with citations."""
-    state.update(searches=0, max_searches=RESEARCH_MAX_SEARCHES)  # each sub-agent gets its own searches
-    tools = [search_wri, show_chart, suggest_followups]
-    return str(Agent(model=MODEL, system_prompt=RESEARCH_PROMPT, tools=tools)(request))
+# Earlier questions of this session (one runtime session = one conversation). The old orchestrator held
+# this memory; it also rewrote every sub-agent answer word for word, which cost 8 to 17 seconds.
+HISTORY = []
+MAX_HISTORY = 4
 
 
-@tool
-def gaps_agent(topic: str) -> str:
-    """Map what WRI has published on a topic and suggest gaps and follow-up research."""
-    state.update(searches=0, max_searches=GAPS_MAX_SEARCHES)  # each sub-agent gets its own searches
-    tools = [search_wri, list_documents, show_coverage_dashboard, show_chart, suggest_followups]
-    return str(Agent(model=MODEL, system_prompt=GAPS_PROMPT, tools=tools)(topic))
+def remember(request, answer_body):
+    """Keep the question and the answer text, without [n] markers (those numbers belong to one answer only)."""
+    HISTORY.append((request, re.sub(r"\s*\[\d+\]", "", answer_body)))
+    del HISTORY[:-MAX_HISTORY]
 
 
-orchestrator = Agent(model=MODEL, system_prompt=ORCHESTRATOR_PROMPT, tools=[research_agent, gaps_agent])
+def make_agent(mode):
+    """A fresh agent for this question that already knows the earlier questions and answers."""
+    messages = []
+    for request, answer in HISTORY:
+        messages += [{"role": "user", "content": [{"text": request}]},
+                     {"role": "assistant", "content": [{"text": answer}]}]
+    if mode == "gaps":
+        return Agent(model=MODEL, system_prompt=GAPS_PROMPT, tools=[search_wri, list_documents], messages=messages)
+    return Agent(model=MODEL, system_prompt=RESEARCH_PROMPT, tools=[search_wri], messages=messages)
+
 
 app = BedrockAgentCoreApp()
 
 
+MODE_REQUESTS = {
+    "ask": "{q}",
+    "briefing": "Write a research briefing on this topic: {q}",
+    "gaps": "Map the gaps in WRI's research on this topic: {q}",
+}
+
+
+def build_result(answer):
+    """Turn the model's answer into the structured result the chat page displays.
+    Page numbers, titles and passages come from what the search tool returned, never from
+    the model's own text. Only the quote comes from the model, and it is checked against the passage."""
+    body, sources_text = split_answer(answer)
+    cited = set(cited_numbers(body)) & set(state["retrieved"])
+    quotes = parse_quotes(sources_text)
+    sources = []
+    for number in sorted(state["retrieved"]):
+        item = state["retrieved"][number]
+        doc, is_cited = item["doc"], number in cited
+        quote = quotes.get(number) if is_cited else None
+        span = locate_quote(quote, item["text"]) if quote else None
+        text, highlight, cut_start, cut_end = excerpt(item["text"], span, 2500 if is_cited else 1200)
+        sources.append({
+            "n": number, "cited": is_cited, "doc_id": doc["doc_id"], "title": doc.get("title", ""),
+            "year": str(doc.get("year", "")), "resource_type": doc.get("resource_type", ""),
+            "subtype": doc.get("subtype_label", ""), "regions": list(doc.get("regions", [])),
+            "topics": list(doc.get("topics", [])), "language": doc.get("original_language", ""),
+            "url": doc.get("source_url", ""), "pages_total": int(doc["pages_total"]) if doc.get("pages_total") else None,
+            "section_title": item["section_title"], "page_start": item["page_start"], "page_end": item["page_end"],
+            "relevancy": item["score"], "chunk_hits": item["chunk_hits"],
+            "quote": quote, "verified": (span is not None) if quote else None,
+            "passage": {"text": text, "highlight": list(highlight) if highlight else None,
+                        "cut_start": cut_start, "cut_end": cut_end}})
+    cited_sources = [x for x in sources if x["cited"]]
+    # One entry per document, most relevant first. A document is as relevant as its best section.
+    by_doc = {}
+    for x in sources:
+        d = by_doc.setdefault(x["doc_id"], {
+            "doc_id": x["doc_id"], "title": x["title"], "year": x["year"], "subtype": x["subtype"],
+            "regions": x["regions"], "topics": x["topics"], "language": x["language"], "url": x["url"],
+            "pages_total": x["pages_total"], "relevancy": 0.0, "cited": False, "sources": []})
+        d["relevancy"] = max(d["relevancy"], x["relevancy"])
+        d["cited"] = d["cited"] or x["cited"]
+        d["sources"].append(x["n"])
+    scores = {x["n"]: x["relevancy"] for x in sources}
+    for d in by_doc.values():
+        d["sources"].sort(key=lambda n: -scores[n])
+    documents = sorted(by_doc.values(), key=lambda d: (-d["relevancy"], -len(d["sources"])))
+    cited_docs = [d for d in documents if d["cited"]]
+    shown = cited_docs or documents
+    by_subtype = {}
+    for d in shown:
+        by_subtype[d["subtype"] or "Other"] = by_subtype.get(d["subtype"] or "Other", 0) + 1
+    stats = {
+        "documents_retrieved": len(documents), "documents_cited": len(cited_docs),
+        "passages_retrieved": len(sources), "passages_cited": len(cited_sources),
+        "years": sorted({d["year"] for d in shown if d["year"]}),
+        "languages": sorted({d["language"] for d in shown if d["language"]}),
+        "by_subtype": sorted(by_subtype.items(), key=lambda kv: -kv[1]),
+        "matching_documents": None if state["allowed"] is None else len(state["allowed"])}
+    return {"answer": answer, "body": body, "sources": sources, "documents": documents, "stats": stats}
+
+
 @app.entrypoint
 def invoke(payload):
-    if payload.get("action") == "pdf_link":  # the chat page wants a fresh link to a source PDF
-        doc = docs_table.get_item(Key={"doc_id": payload["doc_id"]}).get("Item", {})
-        return {"url": pdf_link(doc.get("source_bucket", ""), doc.get("s3_key", ""))}
     reset_state()  # new question: reset the call counts and the "already returned" list
-    if payload.get("language") in LANGUAGES:  # the chat page's language selector ("" = all languages)
-        state["language"] = payload["language"]
-    answer = str(orchestrator(payload["prompt"]))
-    # Also report the evidence behind the answer, any charts or dashboard, and suggested follow-ups
-    # (the chat page shows these)
-    return {"answer": answer, "documents": len(state["doc_numbers"]), "sections": len(state["seen"]),
-            "visuals": state["visuals"], "followups": state["followups"], "read": state["read"],
-            "pdfs": state["pdfs"]}
+    state["allowed"] = allowed_doc_ids(payload.get("filters"))
+    request = MODE_REQUESTS.get(payload.get("mode", "ask"), "{q}").format(q=payload["prompt"])
+    language = payload.get("language")
+    if language and language.lower() not in ("auto", ""):
+        request += f"\n\n(Write the answer in {language}.)"
+    mode = payload.get("mode", "ask")
+    state["max_searches"] = GAPS_MAX_SEARCHES if mode == "gaps" else MAX_SEARCHES
+    answer = str(make_agent(mode)(request))
+    result = build_result(answer)
+    remember(request, result["body"])
+    return result
 
 
 if __name__ == "__main__":

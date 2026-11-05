@@ -14,7 +14,7 @@ provider "aws" {}
 data "aws_region" "current" {}
 
 locals {
-  source_bucket   = "wri-bucket-6157-5871-0841"
+  source_bucket   = "wri-publications"
   sections_bucket = "askwri-sections-${data.aws_caller_identity.me.account_id}"
 }
 

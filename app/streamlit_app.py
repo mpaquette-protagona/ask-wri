@@ -1,352 +1,281 @@
-"""The AskWRI chat page. Sends each question to the agent (local or on AgentCore)
-and shows the answer with its citations, sources and any charts. Clicking a source opens the PDF.
+"""The AskWRI chat page: menu on the left, the cited answer in the middle, and the source
+passage (with the supporting quote highlighted) on the right once an answer has sources.
+Sends each question to the agent (local or on AgentCore). Styling is in style.css, text in i18n.py.
 """
 import json
 import os
-import sys
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
-import altair as alt  # installed with Streamlit
 import boto3
-import pandas as pd  # installed with Streamlit
 import requests
 import streamlit as st
 from botocore.config import Config
 
-# The language names live in agent/labels.py (one copy, shared with the agent and the Lambda)
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agent"))
-from labels import LANGUAGES  # noqa: E402
+import i18n
+import ui
 
-# While a source PDF is open the page is wide (chat on the left, PDF on the right); otherwise centered.
-viewing = st.session_state.get("viewing")
-st.set_page_config(page_title="AskWRI", page_icon="🌍", layout="wide" if viewing else "centered")
-
-AGENT_NAME = "askwri_agent"  # the agent's name in Terraform (agent.tf); we look up its ARN by name
-USE_LOCAL_AGENT = False      # True = talk to `python agent/agent.py` running on this computer
-LOCAL_URL = "http://localhost:8080/invocations"
+# Replace account_id with your AWS account id (or set the AGENT_ARN environment variable).
+# Set it to "" to use the local agent.
+AGENT_ARN = os.environ.get("AGENT_ARN", "arn:aws:bedrock-agentcore:us-east-1:account_id:runtime/askwri_agent-wPm1MF2o63")
+LOCAL_URL = os.environ.get("LOCAL_URL", "http://localhost:8080/invocations")  # used when AGENT_ARN is ""
+REGION = os.environ.get("AWS_REGION") or boto3.Session().region_name or "us-east-1"
 DOCS_TABLE = "askwri-documents"
-PALETTE = ["#2F6B4F", "#7FA893", "#C9A227", "#8A5A44", "#5B7C99"]  # chart colours (match the theme)
 
-# Clickable examples shown on an empty chat. Each one asks for a chart and was tested to draw one.
-EXAMPLES = [
-    "How much international climate finance has China provided? Chart the amounts by year or by type.",
-    "How fast has global energy efficiency improved compared with the rate needed through 2030? Chart it.",
-    "Compare how fast energy intensity fell in the US (1950-2022 and 1970-2022) and in China (1980-2000 and 2006-2010). Chart it.",
-]
-# Used under an answer only when the agent did not suggest follow-up questions itself
-FOLLOW_UPS = {
-    "Turn into briefing": "Turn your previous answer into a research briefing.",
-    "Find gaps on this": "Find the gaps in WRI's research on the topic of my previous question.",
-}
-
-# Keep the PDF pane in view while the chat scrolls. If Streamlit changes its page structure this just
-# stops working and the pane scrolls with the page; nothing breaks.
-st.markdown("""<style>
-div[data-testid="stColumn"]:has(#pdf-pane) { position: sticky; top: 3rem; align-self: flex-start; }
-</style>""", unsafe_allow_html=True)
-
-# No profile is named here: boto3 uses your AWS_PROFILE or your login's credentials.
-# The region comes from AWS_REGION (which boto3 ignores by itself), AWS_DEFAULT_REGION or your profile.
-session = boto3.Session(region_name=os.environ.get("AWS_REGION"))
-
-# Long answers (like a gaps analysis) can take a minute or more. boto3 gives up after 60 seconds by
-# default, so wait up to 15 minutes. Retries are off: a retry would run the whole agent a second time.
-SLOW_CALL_CONFIG = Config(read_timeout=900, retries={"max_attempts": 1, "mode": "standard"})
+MODES = ["ask", "briefing", "gaps"]
 
 
 @st.cache_resource
-def find_agent_arn():
-    """Ask AgentCore for the ARN of the agent called AGENT_NAME (so nobody has to copy it by hand)."""
-    control = session.client("bedrock-agentcore-control")
-    for page in control.get_paginator("list_agent_runtimes").paginate():
-        for runtime in page["agentRuntimes"]:
-            if runtime["agentRuntimeName"] == AGENT_NAME:
-                return runtime["agentRuntimeArn"]
-    raise RuntimeError(f"No AgentCore agent named {AGENT_NAME} found. Did terraform apply finish?")
+def agent_client():
+    # Gap analyses and briefings can take close to a minute; the boto3 default read timeout is 60 s.
+    # No automatic retry, so a slow question is never run (and paid for) twice.
+    config = Config(read_timeout=900, connect_timeout=10, retries={"max_attempts": 1})
+    return boto3.Session(region_name=REGION).client("bedrock-agentcore", config=config)
 
 
-@st.cache_data(ttl=300)
-def library_rows():
-    """The year and language of every loaded document (empty list if the table can't be read)."""
+@st.cache_data(ttl=600)
+def library():
+    """Read the document list once: how many publications there are and the years they cover."""
     try:
-        table = session.resource("dynamodb").Table(DOCS_TABLE)
-        rows, kwargs = [], {"ProjectionExpression": "#y, #l",
-                            "ExpressionAttributeNames": {"#y": "year", "#l": "language"}}
-        while True:  # follow pagination
+        table = boto3.Session(region_name=REGION).resource("dynamodb").Table(DOCS_TABLE)
+        kwargs = dict(ProjectionExpression="#y", ExpressionAttributeNames={"#y": "year"})
+        items = []
+        while True:
             page = table.scan(**kwargs)
-            rows += [{"year": d.get("year", ""), "language": d.get("language", "")} for d in page["Items"]]
+            items += page["Items"]
             if "LastEvaluatedKey" not in page:
-                return rows
+                break
             kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
     except Exception:
-        return []
+        return {"count": 0, "years": []}
+    return {"count": len(items), "years": sorted({i["year"] for i in items if i.get("year")})}
 
 
-def library_caption(language):
-    """Say what is searched, e.g. 'Searching 15 WRI publications, 2024.'"""
-    rows = [r for r in library_rows() if not language or r["language"] == language]
-    if not rows:
-        return ""
-    years = sorted(r["year"] for r in rows if r["year"])
-    span = "" if not years else f", {years[0]}" if years[0] == years[-1] else f", {years[0]}–{years[-1]}"
-    kind = f"{LANGUAGES.get(language, language)} " if language else ""
-    return f"Searching {len(rows)} {kind}WRI publication{'s' if len(rows) != 1 else ''}{span}."
+def ask_agent(job):
+    """Send the question to the agent and return its structured result."""
+    payload = {"prompt": job["question"], "mode": job["mode"], "language": job["language"]}
+    if not AGENT_ARN:
+        result = requests.post(LOCAL_URL, json=payload, timeout=900).json()
+    else:
+        resp = agent_client().invoke_agent_runtime(agentRuntimeArn=AGENT_ARN,
+                                                   runtimeSessionId=st.session_state.session_id,
+                                                   payload=json.dumps(payload))
+        result = json.loads(resp["response"].read())
+    if not isinstance(result, dict) or "sources" not in result:
+        raise RuntimeError(str(result)[:200] if not isinstance(result, dict) else result.get("error", "unexpected reply"))
+    return result
 
 
-@st.cache_data(show_spinner=False)
-def pdf_bytes(doc_id, _url):
-    """Download a source PDF from the temporary link the agent gave us (cached per document).
-    The leading underscore tells Streamlit not to include the link in the cache key."""
-    response = requests.get(_url, timeout=60)
-    response.raise_for_status()
-    return response.content
+# ---- small callbacks -------------------------------------------------------------------
+def set_mode(mode):
+    st.session_state.mode = mode
 
 
-LINK_MAX_AGE = 1200  # seconds: a link older than this (20 minutes) is replaced before use
+def go_home():
+    """Back to the start screen. Earlier questions stay in the Recent list."""
+    st.session_state.view = None
+    st.session_state.mode = "ask"
+    st.session_state.pop("queued", None)
 
 
-def fresh_pdf_link(doc_id):
-    """Ask the agent for a new temporary link to a document's PDF (fast: no question is answered)."""
-    client = session.client("bedrock-agentcore", config=SLOW_CALL_CONFIG)
-    resp = client.invoke_agent_runtime(agentRuntimeArn=find_agent_arn(),
-                                       runtimeSessionId=st.session_state.session_id,
-                                       payload=json.dumps({"action": "pdf_link", "doc_id": doc_id}))
-    return json.loads(resp["response"].read()).get("url", "")
+def submit_home():
+    """The question typed into the big box on the start screen: queue it and let the page rerun."""
+    text = (st.session_state.get("home_input") or "").strip()
+    if text:
+        queue(text, st.session_state.mode)
 
 
-def page_label(pages):
-    """'26' -> 'p. 26', '2-3' -> 'pp. 2-3'."""
-    return f"pp. {pages}" if "-" in pages else f"p. {pages}"
+def view_turn(index):
+    st.session_state.view = index
 
 
-def draw_pane(source):
-    """The right-hand pane: the source PDF, with a close button."""
-    st.markdown('<div id="pdf-pane"></div>', unsafe_allow_html=True)
-    head, close = st.columns([6, 1])
-    head.markdown(f"**{source['document']}**  \n{source['section']} · {page_label(source['pages'])}")
-    if close.button("✕", key="close_pane", help="Close"):
-        st.session_state.viewing = None
-        st.rerun()
-
-    url, data, problem = source.get("url", ""), None, None
-    for attempt in (1, 2):  # attempt 2 uses a fresh link, for an old or expired one
-        try:
-            if not url:
-                url = fresh_pdf_link(source["doc_id"])
-            if not url:
-                problem = "The agent could not make a link to this PDF."
-                break
-            data = pdf_bytes(source["doc_id"], url)
-            break
-        except Exception as e:
-            problem, url = f"{type(e).__name__}: {e}", ""  # forget the link; the next attempt gets a new one
-    if data is None:
-        st.warning("Couldn't load the PDF.")
-        with st.expander("Technical details"):
-            st.code(problem)
-        return
-    try:
-        st.pdf(data, height=520)
-    except Exception as e:
-        st.warning("Couldn't show the PDF here. Is the PDF viewer installed? "
-                   "Run: pip install -r requirements.txt")
-        with st.expander("Technical details"):
-            st.code(f"{type(e).__name__}: {e}")
-    first_page = source["pages"].split("-")[0]
-    st.link_button(f"Open in a new tab at page {first_page}", f"{url}#page={first_page}")
+def queue(question, mode):
+    st.session_state.queued = {"question": question, "mode": mode}
 
 
-def draw_sources(message, index):
-    """One 'Sources' list, grouped by document. Clicking a section opens its PDF on the right."""
-    read = message.get("read") or []
-    if not read:
-        return
-    documents = {}
-    for item in read:
-        documents.setdefault(item["source"], {"title": item["document"], "sections": []})["sections"].append(item)
-    with st.expander(f"Sources ({len(documents)} document{'s' if len(documents) != 1 else ''}, "
-                     f"{len(read)} section{'s' if len(read) != 1 else ''})"):
-        for number, document in documents.items():
-            st.markdown(f"**[{number}] {document['title']}**")
-            for k, item in enumerate(document["sections"]):
-                label = f"{item['section']} · {page_label(item['pages'])}"
-                if st.button(label, key=f"source{index}_{number}_{k}", type="tertiary"):
-                    recent = time.time() - message.get("answered_at", 0) < LINK_MAX_AGE
-                    st.session_state.viewing = {
-                        **item, "url": message.get("pdfs", {}).get(item["doc_id"], "") if recent else ""}
-                    st.rerun()
+def pick_source(index):
+    chosen = st.session_state.get(f"pills_{index}")
+    if chosen is not None:  # clicking the active chip again must not leave the panel empty
+        st.session_state.src_n = chosen
 
 
-def draw_chart(chart):
-    """Draw one chart the agent asked for (bar, barh, line or pie)."""
-    labels, series, kind = chart["labels"], chart["series"], chart["chart_type"]
-    table = pd.DataFrame(series, index=labels)  # one column per series, one row per label
-    long = table.reset_index(names="label").melt("label", var_name="series", value_name="value")
-    unit = chart.get("unit") or ""
-    colors = alt.Scale(range=PALETTE)
-    legend = alt.Legend(title=None) if len(series) > 1 else None
-    if kind == "pie":
-        first = long[long["series"] == long["series"].iloc[0]]
-        picture = alt.Chart(first).mark_arc(innerRadius=50).encode(
-            theta="value:Q", color=alt.Color("label:N", sort=None, scale=colors, legend=alt.Legend(title=None)),
-            tooltip=["label", "value"])
-    elif kind == "line":
-        picture = alt.Chart(long).mark_line(point=True).encode(
-            x=alt.X("label:N", sort=None, title=None), y=alt.Y("value:Q", title=unit),
-            color=alt.Color("series:N", scale=colors, legend=legend), tooltip=["label", "series", "value"])
-    elif kind == "barh":
-        picture = alt.Chart(long).mark_bar().encode(
-            y=alt.Y("label:N", sort=None, title=None), x=alt.X("value:Q", title=unit), yOffset="series:N",
-            color=alt.Color("series:N", scale=colors, legend=legend), tooltip=["label", "series", "value"])
-    else:  # bar
-        picture = alt.Chart(long).mark_bar().encode(
-            x=alt.X("label:N", sort=None, title=None), y=alt.Y("value:Q", title=unit), xOffset="series:N",
-            color=alt.Color("series:N", scale=colors, legend=legend), tooltip=["label", "series", "value"])
-    st.markdown(f"**{chart['title']}**")
-    st.altair_chart(picture.configure_view(stroke=None), width="stretch")
-    if chart.get("note"):
-        st.caption(chart["note"])
+def ordered_cited(result):
+    """Cited source numbers, most relevant document first, and inside a document the best section first."""
+    cited = {s["n"] for s in result["sources"] if s["cited"]}
+    return [n for d in result["documents"] for n in d["sources"] if n in cited]
 
 
-def draw_visual(visual):
-    """Draw a chart, or a dashboard (number tiles plus a few charts)."""
-    if visual["kind"] == "chart":
-        draw_chart(visual)
-        return
-    st.markdown(f"### {visual['title']}")
-    for column, kpi in zip(st.columns(len(visual["kpis"])), visual["kpis"]):
-        column.metric(kpi["label"], kpi["value"])
-    for column, chart in zip(st.columns(len(visual["charts"])), visual["charts"]):
-        with column:
-            draw_chart(chart)
-    st.caption(visual.get("note", ""))
+@st.dialog("AskWRI", width="large")
+def all_documents(result, tr):
+    """The documents the answer used, most relevant first. Documents that were browsed but not used are only counted."""
+    used = [d for d in result["documents"] if d["cited"]]
+    cited_numbers = {s["n"] for s in result["sources"] if s["cited"]}
+    st.markdown(f"**{tr('dialog_title')}**")
+    st.caption(tr("dialog_scope", used=len(used), browsed=len(result["documents"])))
+    st.caption(tr("dialog_caption"))
+    by_number = {s["n"]: s for s in result["sources"]}
+    for rank, document in enumerate(used, 1):
+        title = document["title"] if len(document["title"]) <= 70 else document["title"][:68].rstrip() + "\u2026"
+        with st.expander(f"{rank}. {title} \u00b7 {ui.percent(document['relevancy'])} %"):
+            st.html(f'<div class="src-title">{ui.esc(document["title"])}</div>'
+                    f'<div class="src-meta">{ui.esc(ui.document_meta(document, tr))}</div>'
+                    + ui.relevancy_html(document["relevancy"], tr))
+            st.markdown(f"**{tr('passages_in_doc')}**")
+            for number in document["sources"]:
+                if number in cited_numbers:
+                    st.html(ui.source_html(by_number[number], tr))
+            if document.get("url"):
+                st.link_button(tr("open_document"), document["url"], key=f"open_{rank}")
 
 
-# Plain-English explanations for common errors: (words to look for, what happened, what to do)
-ERROR_HELP = [
-    (("ExpiredToken", "expired"), "Your AWS login has expired.",
-     "Log in again in this terminal, then restart this page."),
-    (("AccessDenied", "not authorized"), "Your AWS role isn't allowed to do that.",
-     "It needs permission to find and call the agent (bedrock-agentcore)."),
-    (("Unable to locate credentials", "NoCredentials", "specify a region"), "AWS isn't set up in this terminal.",
-     "Set your AWS login and AWS_DEFAULT_REGION, then restart this page."),
-    (("No AgentCore agent named", "ResourceNotFound"), "I couldn't find the AskWRI agent.",
-     "Check that terraform apply finished and that you are using the same region."),
-    (("RuntimeClientError", "(500)"), "The agent hit an error while answering.",
-     "Try again. If it keeps happening, look at the agent's logs in CloudWatch."),
-    (("Read timeout", "timed out"), "That took too long.", "Try a narrower question."),
-]
+# ---- page setup ------------------------------------------------------------------------
+st.set_page_config(page_title="AskWRI", page_icon="\U0001F30D", layout="wide")
+st.html(f"<style>{(Path(__file__).parent / 'style.css').read_text()}</style>")
+if st.session_state.get("dark_mode"):  # light is the default; dark loads on top of it
+    st.html(f"<style>{(Path(__file__).parent / 'style_dark.css').read_text()}</style>")
 
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+    st.session_state.turns = []
+    st.session_state.view = None
+    st.session_state.mode = "ask"
+    st.session_state.src_turn = None
+    st.session_state.src_n = None
+    st.session_state.ui_lang = "en"
+    st.session_state.dark_mode = False  # light is the default
 
-def friendly_error(error):
-    """Turn an error into a short explanation and a suggestion."""
-    text = str(error)
-    for words, what, todo in ERROR_HELP:
-        if any(word in text for word in words):
-            return what, todo
-    return "Something went wrong.", "Please try again."
+# ---- top right: the language of the whole tool (interface and answers) -------------------
+with st.container(key="top_bar"):
+    st.selectbox("Language", list(i18n.UI_LANGUAGES), format_func=i18n.UI_LANGUAGES.get, key="ui_lang",
+                 label_visibility="collapsed", accept_new_options=False)
+    tr = i18n.Tr(st.session_state.ui_lang)
+    st.toggle(tr("dark_mode"), key="dark_mode", label_visibility="collapsed")  # sun and moon are drawn by style.css
 
+lib = library()
+turns = st.session_state.turns
 
-def ask_agent(prompt, session_id, agent_arn, language):
-    """Send the prompt to the agent and return its reply (a dict). Runs in a helper thread."""
-    request = {"prompt": prompt, "language": language}  # language "" = search every language
-    if USE_LOCAL_AGENT:
-        return requests.post(LOCAL_URL, json=request, timeout=600).json()
-    client = session.client("bedrock-agentcore", config=SLOW_CALL_CONFIG)
-    resp = client.invoke_agent_runtime(agentRuntimeArn=agent_arn, runtimeSessionId=session_id,
-                                       payload=json.dumps(request))
-    return json.loads(resp["response"].read())
+# ---- left column: logo (home), menu, recent questions ---------------------------------------
+with st.sidebar:
+    st.button("AskWRI", key="brand_home", type="tertiary", on_click=go_home)  # no hover tooltip: the logo just takes you home
+    for mode in MODES:
+        st.button(tr(f"nav_{mode}"), key=f"nav_{mode}", use_container_width=True, on_click=set_mode, args=(mode,),
+                  type="primary" if st.session_state.mode == mode else "secondary")
+    if turns:
+        st.html(f'<div class="side-head">{ui.esc(tr("recent"))}</div>')
+        for index, turn in list(enumerate(turns))[::-1][:8]:
+            text = turn["question"] if len(turn["question"]) <= 38 else turn["question"][:36].rstrip() + "\u2026"
+            st.button(text, key=f"recent_{index}", use_container_width=True, on_click=view_turn, args=(index,),
+                      type="primary" if index == st.session_state.view else "secondary", help=turn["question"])
 
+# ---- decide what to run (typed question, example button, or "Turn into briefing") --------
+mode = st.session_state.mode
+job = st.session_state.pop("queued", None)
+view = st.session_state.view
+at_home = job is None and not (view is not None and view < len(turns))
+if not at_home:  # on the start screen the question box is part of the page (see below)
+    typed = st.chat_input(tr(f"hint_{mode}"), key=f"input_{mode}")
+    if typed:
+        job = {"question": typed.strip(), "mode": mode}
+if job:
+    job.update(language=tr.answer_language)
 
-# While a source is open, the chat goes in the left column and the PDF in the right one
-chat, pane = st.columns([1, 1]) if viewing else (st.container(), None)
+turn = turns[view] if (not job and view is not None and view < len(turns)) else None
+has_sources = turn is not None and any(s["cited"] for s in turn["result"]["sources"])
 
-with chat:
-    st.title("AskWRI")
+# The source panel only exists once an answer has sources to show
+if has_sources:
+    center, right = st.columns([5, 4], gap="small")
+else:
+    center, right = st.container(), None
 
-    # A language choice appears only when the library holds documents in more than one language
-    languages = {r["language"] for r in library_rows() if r["language"]}
-    language = ""
-    if len(languages) > 1:
-        names = {LANGUAGES.get(code, code): code for code in sorted(languages)}
-        choice = st.selectbox("Search documents in", ["All languages"] + list(names), key="language_choice")
-        language = names.get(choice, "")
-    st.caption(f"Ask a question, write a research briefing, or find gaps in WRI's research. "
-               f"{library_caption(language)}")
+# ---- middle column ----------------------------------------------------------------------
+with center:
+    if job:
+        st.html(ui.question_html(job["question"], tr(f"mode_{job['mode']}") if job["mode"] != "ask" else None))
+        failed = False
+        with st.status(tr("searching")) as status:
+            started = time.time()
+            try:
+                result = ask_agent(job)
+            except Exception as error:
+                failed = True
+                status.update(label=tr("error_title"), state="error")
+                st.error(tr("error_body", error=type(error).__name__))
+        if not failed:
+            turns.append({**job, "result": result, "seconds": round(time.time() - started)})
+            st.session_state.view = len(turns) - 1
+            st.rerun()
 
-    # 1. Set up the session id and chat history on first load
-    if "session_id" not in st.session_state:
-        st.session_state.session_id = str(uuid.uuid4())
-        st.session_state.messages = []
+    elif turn is None:
+        years = lib["years"]
+        with st.container(key="home"):
+            st.html(f'<div class="hero-title">{ui.esc(tr("hero_title"))}</div>'
+                    f'<div class="hero-sub">{ui.esc(tr("hero_sub", count=lib["count"], first=years[0] if years else "", last=years[-1] if years else ""))}</div>')
+            st.chat_input(tr(f"hint_{mode}"), key="home_input", on_submit=submit_home)
+            st.html(f'<div class="try-label">{ui.esc(tr("try_example"))}</div>')
+            for example_mode in MODES:
+                st.button(f"{tr(f'nav_{example_mode}')}: {tr(f'example_{example_mode}')}", key=f"example_{example_mode}",
+                          use_container_width=True, on_click=queue, args=(tr(f"example_{example_mode}"), example_mode))
 
-    # 2. Show the earlier messages, each answer with its charts and a Sources list
-    for index, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            for visual in message.get("visuals", []):
-                draw_visual(visual)
-            draw_sources(message, index)
-            if message.get("documents") == 1:
-                st.caption("Single source: every finding comes from one document, so nothing here is "
-                           "cross-checked against other WRI publications.")
+    else:
+        result, stats, documents = turn["result"], turn["result"]["stats"], turn["result"]["documents"]
+        ordered = ordered_cited(result)
 
-    # 3. Buttons: examples on an empty chat, suggested follow-ups under the latest answer
-    if not st.session_state.messages:
-        for example in EXAMPLES:
-            if st.button(example, width="stretch"):
-                st.session_state.queued = example
-                st.rerun()
-    elif st.session_state.messages[-1]["role"] == "assistant":
-        suggestions = st.session_state.messages[-1].get("followups", [])
-        for number, suggestion in enumerate(suggestions):
-            if st.button(suggestion, key=f"suggestion{number}", width="stretch"):
-                st.session_state.queued = suggestion
-                st.rerun()
-        if not suggestions:  # no suggestions from the agent: offer the two standard follow-ups
-            for column, label in zip(st.columns(len(FOLLOW_UPS)), FOLLOW_UPS):
-                if column.button(label):
-                    st.session_state.queued = FOLLOW_UPS[label]
-                    st.rerun()
+        # header: short title and "Turn into briefing"
+        head, brief_col = st.columns([6, 3], vertical_alignment="center")
+        title = turn["question"] if len(turn["question"]) <= 40 else turn["question"][:38].rstrip() + "\u2026"
+        head.html(f'<div class="c-title">{ui.esc(title)}</div>')
+        with brief_col:
+            if turn["mode"] == "ask":
+                st.button(tr("turn_into_briefing"), key=f"brief_{view}", type="primary", use_container_width=True,
+                          on_click=queue, args=(turn["question"], "briefing"))
 
-    # 4. Handle a new question (typed, or queued by a button)
-    typed = st.chat_input("Ask a question, request a briefing, or find research gaps")
-    user_text = st.session_state.pop("queued", None) or typed
-    if user_text:
-        st.session_state.messages.append({"role": "user", "content": user_text})
-        with st.chat_message("user"):
-            st.markdown(user_text)
-        with st.chat_message("assistant"):
-            reply, error = None, None
-            with st.status("Searching WRI research...") as status:
-                started = time.time()
-                try:
-                    arn = None if USE_LOCAL_AGENT else find_agent_arn()
-                    # Ask in a helper thread so this page can show a running timer meanwhile
-                    with ThreadPoolExecutor(max_workers=1) as pool:
-                        future = pool.submit(ask_agent, user_text, st.session_state.session_id, arn, language)
-                        while not future.done():
-                            status.update(label=f"Searching WRI research... {int(time.time() - started)}s")
-                            time.sleep(1)
-                        reply = future.result()
-                    status.update(label=f"Done in {int(time.time() - started)}s", state="complete")
-                except Exception as e:  # show a friendly message instead of a long traceback
-                    error = e
-                    status.update(label="Something went wrong", state="error")
-            if error:
-                what, todo = friendly_error(error)
-                st.error(f"{what} {todo}")
-                with st.expander("Technical details"):
-                    st.code(str(error))
-                st.stop()
-        st.session_state.messages.append({
-            "role": "assistant", "content": reply["answer"],
-            "documents": reply.get("documents", 0), "sections": reply.get("sections", 0),
-            "visuals": reply.get("visuals", []), "followups": reply.get("followups", []),
-            "read": reply.get("read", []), "pdfs": reply.get("pdfs", {}), "answered_at": time.time()})
-        st.rerun()  # redraw from the history, so the answer shows its sources and follow-up buttons
+        st.html(ui.question_html(turn["question"], tr(f"mode_{turn['mode']}") if turn["mode"] != "ask" else None))
 
-if pane is not None:
-    with pane:
-        draw_pane(viewing)
+        # "What the search found": documents only; passages are inside the document list
+        if not stats["documents_cited"]:
+            badge, note = tr("badge_none"), tr("note_none")
+        elif stats["documents_cited"] == 1:
+            cited_doc = next(d for d in documents if d["cited"])
+            badge = tr("badge_single")
+            note = tr("note_single", kind=tr.label("subtype", cited_doc["subtype"] or "Other").lower())
+        else:
+            badge, note = tr("badge_many", n=stats["documents_cited"]), tr("note_many", n=stats["documents_cited"])
+        with st.container(key=f"found_{view}"):
+            st.html(ui.found_html(stats, badge, tr))
+            note_col, button_col = st.columns([5, 3], vertical_alignment="center")
+            note_col.html(f'<div class="found-note">{ui.esc(note)}</div>')
+            used_count = stats["documents_cited"]
+            if used_count and button_col.button(tr("view_all", n=used_count) if used_count > 1 else tr("view_one"),
+                                                key=f"all_{view}", use_container_width=True):
+                all_documents(result, tr)
+
+        # the answer, with citation chips
+        with st.container(key=f"answer_{view}"):
+            st.markdown(ui.prepare_body(result["body"], {s["n"] for s in result["sources"] if s["cited"]}),
+                        unsafe_allow_html=True)
+        st.caption(tr("answered_in", seconds=turn["seconds"]))
+
+        # source chips, most relevant first: choose which passage the right-hand panel shows
+        if ordered:
+            if st.session_state.src_turn != view:
+                st.session_state.src_turn, st.session_state.src_n = view, ordered[0]
+            st.html(f'<div class="side-head">{ui.esc(tr("sources_heading"))}</div>')
+            by_number = {s["n"]: s for s in result["sources"]}
+            labels = {n: f"{n} \u00b7 " + (by_number[n]["title"][:34].rstrip() + ("\u2026" if len(by_number[n]["title"]) > 34 else ""))
+                      for n in ordered}
+            st.pills(tr("sources_heading"), ordered, key=f"pills_{view}", default=st.session_state.src_n,
+                     format_func=labels.get, label_visibility="collapsed", on_change=pick_source, args=(view,))
+
+# ---- right column: the passage (only when there are sources) ----------------------------
+if right is not None:
+    with right:
+        with st.container(key="source_panel"):
+            by_number = {s["n"]: s for s in turn["result"]["sources"]}
+            shown = by_number.get(st.session_state.src_n)
+            if not shown or not shown["cited"]:
+                shown = by_number[ordered_cited(turn["result"])[0]]
+            st.html(ui.source_html(shown, tr))
+            if shown.get("url"):
+                st.link_button(tr("open_document"), shown["url"])

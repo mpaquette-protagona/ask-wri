@@ -1,14 +1,12 @@
-# Look and feel of the chat page (Streamlit reads this file when you run it from the repo root)
 [theme]
-base = "light"
-primaryColor = "#2F6B4F"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F2EC"
-textColor = "#1F2933"
+primaryColor = "#1f5c45"
+backgroundColor = "#f6f2ea"
+secondaryBackgroundColor = "#f6f2ea"
+textColor = "#1d2a24"
 font = "sans serif"
 
 [client]
-toolbarMode = "minimal"   # hides the Deploy button and developer menu
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

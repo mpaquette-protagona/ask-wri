@@ -10,7 +10,7 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD_DIR = os.path.join(HERE, "build")
 ZIP_PATH = os.path.join(HERE, "agent_code.zip")
-CODE_FILES = ["agent.py", "labels.py"]
+CODE_FILES = ["agent.py", "labels.py", "passages.py"]
 
 # 1. Start with an empty build folder
 shutil.rmtree(BUILD_DIR, ignore_errors=True)

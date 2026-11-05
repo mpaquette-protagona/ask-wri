@@ -7,7 +7,7 @@ import boto3
 from botocore.config import Config
 
 # ---- Constants ----
-SOURCE_BUCKET = "wri-bucket-6157-5871-0841"
+SOURCE_BUCKET = "wri-publications"
 PDF_QUEUE = "askwri-pdf-queue"
 
 # Path to the list of PDFs, one folder above this file

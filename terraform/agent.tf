@@ -63,17 +63,6 @@ resource "aws_iam_role_policy" "agent" {
         Resource = ["${aws_s3_bucket.sections.arn}/*", "${aws_s3_bucket.agent_code.arn}/*"]
       },
       {
-        # the source PDFs: the agent makes temporary links to them for the chat page
-        Effect   = "Allow"
-        Action   = ["s3:GetObject"]
-        Resource = "arn:aws:s3:::${local.source_bucket}/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = "arn:aws:s3:::${local.source_bucket}"
-      },
-      {
         Effect = "Allow"
         Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents",
         "logs:DescribeLogGroups", "logs:DescribeLogStreams"]

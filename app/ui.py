@@ -52,12 +52,15 @@ def found_html(stats, badge, tr):
     """The "What the search found" card. First view shows documents only: four number tiles and a
     documents-by-type bar. Passages are one click away, in the document list."""
     languages = stats.get("languages") or []
-    language_text = ", ".join(code.upper() for code in languages) if languages else "\u2013"
+    # full names in the page language ("Spanish", "Español"...); a code we have no name for is shown as it is
+    names = [tr.label("language", code) if tr.label("language", code) != code else code.upper() for code in languages]
+    language_text = ", ".join(names) if names else "\u2013"
     tiles = [(stats["documents_retrieved"], tr("tile_retrieved")),
              (stats["documents_cited"], tr("tile_cited")),
              (years_text(stats["years"]), tr("tile_year")),
              (language_text, tr("tile_languages"))]
-    tiles_html = "".join(f'<div class="tile"><div class="tile-n">{esc(n)}</div>'
+    # a long value (language names) gets a smaller size so it stays inside its tile
+    tiles_html = "".join(f'<div class="tile"><div class="tile-n{" tile-n-text" if len(str(n)) > 6 else ""}">{esc(n)}</div>'
                          f'<div class="tile-l">{esc(label)}</div></div>' for n, label in tiles)
     types = stats.get("by_subtype") or []
     shown, rest = types[:3], sum(count for _, count in types[3:])
@@ -91,9 +94,7 @@ def source_html(source, tr):
     """The right-hand panel: status line, title, details, the passage with the quote highlighted."""
     language = tr.label("language", source.get("language")) if source.get("language") else ""
     translated = source.get("language") not in (None, "", "en")
-    if not source["cited"]:
-        status, css = tr("status_not_cited", n=source["n"]), "status-muted"
-    elif source.get("verified"):
+    if source.get("verified"):
         status = tr("status_verified_translated" if translated else "status_verified", n=source["n"])
         css = "status-ok"
     else:
@@ -112,7 +113,7 @@ def source_html(source, tr):
     note = ""
     if translated:
         note = f'<div class="note">{esc(tr("note_translated", language=language))}</div>'
-    elif source["cited"] and source.get("verified") is False:
+    elif source.get("verified") is False:
         note = f'<div class="note">{esc(tr("note_unverified"))}</div>'
     relevancy = relevancy_html(source["relevancy"], tr) if source.get("relevancy") is not None else ""
     return (f'<div class="src-status {css}">{esc(status)}</div>'

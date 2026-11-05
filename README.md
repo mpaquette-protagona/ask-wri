@@ -159,8 +159,8 @@ CHAT
 | **Start screen** | A large question box in the middle of the page, with three examples below it. |
 | **Left menu** | Ask a question, Research briefing, Find gaps, and your recent questions. Click the **AskWRI** logo to go back to the start screen. |
 | **Top right** | A language dropdown (it shows only the chosen language) and a light/dark switch (sun and moon). |
-| **Answer** | A "What the search found" card (documents retrieved and cited, publication years, document languages, documents by type), then the answer with numbered citation chips. |
-| **View all N documents** | Every retrieved document, most relevant first, with its relevancy and its passages. Documents the answer did not use are marked "Not cited". |
+| **Answer** | A "What the search found" card (documents browsed and documents used in the answer, publication years, document languages, used documents by type), then the answer with numbered citation chips. |
+| **View all N documents** | The documents the answer used, most relevant first, each with its relevancy and the passages that were cited. Documents the search browsed but the answer did not use are only counted ("The answer uses 3 of the 5 documents the search browsed"), not listed. |
 | **Source panel** | On the right, only after an answer has cited sources. It shows the passage with the supporting quote highlighted and a status: *verified in document text*, *verified in translated text*, or *quote not found in text*. Pick another source with the chips under the answer. |
 | **Turn into briefing** | Re-runs a question as a research briefing. |
 
@@ -349,7 +349,7 @@ Port 8080 must be free. If something else uses it, set `LOCAL_URL` to wherever y
 - **No login.** Anyone who can reach the Streamlit page can use it, with the AWS permissions of whoever started it. Don't expose it publicly as is.
 - **No dead-letter queue.** If a PDF keeps failing, SQS retries it until the message expires (1 hour) and then drops it.
 - **Search finds close matches, it can't prove something is absent.** "Gaps" always means gaps within the documents that were ingested.
-- **There is no minimum relevancy.** Weak matches are returned, and shown as "Not cited" when the answer doesn't use them.
+- **There is no minimum relevancy.** The search browses its closest matches even when they are weak. The answer decides which of them to use, and only those are listed, so the "browsed" count can be higher than the "used" count.
 - **Tables and figures are ignored** during ingestion; only text is searchable.
 - **Long PDFs** must fit in one model call, and their text in one model reply. PDFs up to about 19 MB and 150 pages were ingested in testing, but very long documents may still be cut off.
 - **Quotes are checked against the stored text.** For non-English documents that is the English translation, not the original wording.

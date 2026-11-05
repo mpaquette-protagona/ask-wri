@@ -108,19 +108,23 @@ def ordered_cited(result):
 
 @st.dialog("AskWRI", width="large")
 def all_documents(result, tr):
+    """The documents the answer used, most relevant first. Documents that were browsed but not used are only counted."""
+    used = [d for d in result["documents"] if d["cited"]]
+    cited_numbers = {s["n"] for s in result["sources"] if s["cited"]}
     st.markdown(f"**{tr('dialog_title')}**")
+    st.caption(tr("dialog_scope", used=len(used), browsed=len(result["documents"])))
     st.caption(tr("dialog_caption"))
     by_number = {s["n"]: s for s in result["sources"]}
-    for rank, document in enumerate(result["documents"], 1):
-        mark = tr("cited") if document["cited"] else tr("not_cited")
+    for rank, document in enumerate(used, 1):
         title = document["title"] if len(document["title"]) <= 70 else document["title"][:68].rstrip() + "\u2026"
-        with st.expander(f"{rank}. {title} \u00b7 {ui.percent(document['relevancy'])} % \u00b7 {mark}"):
+        with st.expander(f"{rank}. {title} \u00b7 {ui.percent(document['relevancy'])} %"):
             st.html(f'<div class="src-title">{ui.esc(document["title"])}</div>'
                     f'<div class="src-meta">{ui.esc(ui.document_meta(document, tr))}</div>'
                     + ui.relevancy_html(document["relevancy"], tr))
             st.markdown(f"**{tr('passages_in_doc')}**")
             for number in document["sources"]:
-                st.html(ui.source_html(by_number[number], tr))
+                if number in cited_numbers:
+                    st.html(ui.source_html(by_number[number], tr))
             if document.get("url"):
                 st.link_button(tr("open_document"), document["url"], key=f"open_{rank}")
 
@@ -153,7 +157,7 @@ turns = st.session_state.turns
 
 # ---- left column: logo (home), menu, recent questions ---------------------------------------
 with st.sidebar:
-    st.button("AskWRI", key="brand_home", type="tertiary", on_click=go_home, help="Home")
+    st.button("AskWRI", key="brand_home", type="tertiary", on_click=go_home)  # no hover tooltip: the logo just takes you home
     for mode in MODES:
         st.button(tr(f"nav_{mode}"), key=f"nav_{mode}", use_container_width=True, on_click=set_mode, args=(mode,),
                   type="primary" if st.session_state.mode == mode else "secondary")
@@ -242,8 +246,9 @@ with center:
             st.html(ui.found_html(stats, badge, tr))
             note_col, button_col = st.columns([5, 3], vertical_alignment="center")
             note_col.html(f'<div class="found-note">{ui.esc(note)}</div>')
-            if documents and button_col.button(tr("view_all", n=len(documents)), key=f"all_{view}",
-                                               use_container_width=True):
+            used_count = stats["documents_cited"]
+            if used_count and button_col.button(tr("view_all", n=used_count) if used_count > 1 else tr("view_one"),
+                                                key=f"all_{view}", use_container_width=True):
                 all_documents(result, tr)
 
         # the answer, with citation chips

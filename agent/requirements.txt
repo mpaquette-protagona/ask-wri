@@ -1,3 +1,5 @@
 strands-agents
 bedrock-agentcore
 boto3
+# Sends traces to CloudWatch (AgentCore Observability and Evaluations read them)
+aws-opentelemetry-distro>=0.18.0

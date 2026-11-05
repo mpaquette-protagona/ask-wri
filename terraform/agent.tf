@@ -66,7 +66,7 @@ resource "aws_iam_role_policy" "agent" {
         Effect = "Allow"
         Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents",
         "logs:DescribeLogGroups", "logs:DescribeLogStreams"]
-        Resource = "arn:aws:logs:us-east-1:${data.aws_caller_identity.me.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.me.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
       },
       {
         Effect = "Allow"
@@ -89,6 +89,11 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
   role_arn           = aws_iam_role.agent.arn
   depends_on         = [aws_iam_role_policy.agent]
 
+  # Tell the agent which region it runs in (agent.py reads this)
+  environment_variables = {
+    ASKWRI_REGION = data.aws_region.current.region
+  }
+
   agent_runtime_artifact {
     code_configuration {
       entry_point = ["agent.py"]
@@ -108,7 +113,7 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
   }
 }
 
-# Copy this into AGENT_ARN in app/streamlit_app.py
+# The agent's ARN (for reference: the chat page finds the agent by its name)
 output "agent_runtime_arn" {
   value = aws_bedrockagentcore_agent_runtime.agent.agent_runtime_arn
 }

@@ -1,4 +1,4 @@
-"""The only tags, regions and topics Claude is allowed to assign to a document.
+"""The only tags, regions, topics and languages Claude is allowed to assign to a document.
 The sections Lambda and the agent use these lists. KEEP lambdas/labels.py AND agent/labels.py IDENTICAL.
 """
 
@@ -40,3 +40,7 @@ REGIONS = ["Africa", "Asia", "Europe", "Latin America", "North America", "Oceani
 
 TOPICS = ["Business", "Cities", "Climate", "Economics", "Energy", "Equity & Governance",
           "Finance", "Food", "Forests", "Freshwater", "Ocean"]
+
+# The language a document is written in (its main language). The code is stored; the name is shown.
+LANGUAGES = {"en": "English", "es": "Spanish", "fr": "French", "pt": "Portuguese",
+             "zh": "Chinese", "hi": "Hindi", "other": "Other"}

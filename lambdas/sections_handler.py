@@ -10,7 +10,7 @@ import urllib.parse
 import boto3
 from botocore.config import Config
 
-from labels import REGIONS, TAGS, TOPICS
+from labels import LANGUAGES, REGIONS, TAGS, TOPICS
 
 SOURCE_BUCKET = "wri-publications"
 DOCS_TABLE = "askwri-documents"
@@ -31,32 +31,34 @@ Reply with ONLY this JSON and nothing else:
 METADATA_PROMPT = ("Read this document and call save_metadata. Choose only the MOST relevant values, "
                    "using only the allowed values: at most 8 tags, at most 3 topics, and at most 3 "
                    "regions. Include a region only if the document is substantially about it; use an "
-                   "empty list if it is not about a specific region. Do not repeat a value.")
+                   "empty list if it is not about a specific region. Do not repeat a value. Also give the language "
+                   "the document itself is written in (its main language).")
 
 # The tool Claude must call. The "enum" lists lock the answer down to our allowed values.
 TOOL_CONFIG = {
     "tools": [{"toolSpec": {
         "name": "save_metadata",
-        "description": "Save the tags, regions and topics that apply to this document.",
+        "description": "Save the tags, regions, topics and language that apply to this document.",
         "inputSchema": {"json": {
             "type": "object",
             "properties": {
                 "tags": {"type": "array", "items": {"type": "string", "enum": TAGS}},
                 "regions": {"type": "array", "items": {"type": "string", "enum": REGIONS}},
                 "topics": {"type": "array", "items": {"type": "string", "enum": TOPICS}},
+                "language": {"type": "string", "enum": list(LANGUAGES)},
             },
-            "required": ["tags", "regions", "topics"],
+            "required": ["tags", "regions", "topics", "language"],
         }},
     }}],
     "toolChoice": {"tool": {"name": "save_metadata"}},  # force the model to call it
 }
 
 config = Config(read_timeout=600, retries={"max_attempts": 10, "mode": "adaptive"})
-s3 = boto3.client("s3", region_name="us-east-1")
-brt = boto3.client("bedrock-runtime", region_name="us-east-1", config=config)
-sqs = boto3.client("sqs", region_name="us-east-1")
-s3v = boto3.client("s3vectors", region_name="us-east-1")
-docs_table = boto3.resource("dynamodb", region_name="us-east-1").Table(DOCS_TABLE)
+s3 = boto3.client("s3")
+brt = boto3.client("bedrock-runtime", config=config)
+sqs = boto3.client("sqs")
+s3v = boto3.client("s3vectors")
+docs_table = boto3.resource("dynamodb").Table(DOCS_TABLE)
 
 
 def make_doc_id(s3_key):
@@ -106,9 +108,11 @@ def get_metadata(pdf_bytes):
         if "toolUse" in block:
             chosen = block["toolUse"]["input"]
             # Safety net: drop anything not in our allowed lists, and remove repeats
+            language = chosen.get("language") if chosen.get("language") in LANGUAGES else "other"
             return (list(dict.fromkeys(t for t in chosen.get("tags", []) if t in TAGS)),
                     list(dict.fromkeys(r for r in chosen.get("regions", []) if r in REGIONS)),
-                    list(dict.fromkeys(t for t in chosen.get("topics", []) if t in TOPICS)))
+                    list(dict.fromkeys(t for t in chosen.get("topics", []) if t in TOPICS)),
+                    language)
     raise ValueError("Model did not call save_metadata")
 
 
@@ -134,7 +138,7 @@ def handler(event, context):
     pdf_bytes = s3.get_object(Bucket=SOURCE_BUCKET, Key=s3_key)["Body"].read()
     data = ask_claude(pdf_bytes)
     sections = data["sections"]
-    tags, regions, topics = get_metadata(pdf_bytes)
+    tags, regions, topics, language = get_metadata(pdf_bytes)
 
     # 2. If this document was ingested before, delete its old vectors
     #    (the document row is replaced in step 5; a human-written source_url is kept)
@@ -169,10 +173,10 @@ def handler(event, context):
 
     # 5. Write a brand-new document row (replaces any old one completely).
     #    This happens before queueing, because the embed Lambda reads the row.
-    language = data.get("original_language", "")
     docs_table.put_item(Item={
         "doc_id": doc_id, "s3_key": s3_key, "year": s3_key.split("/")[0][:4],
         "resource_type": "research", "source_url": source_url,
+        "source_bucket": SOURCE_BUCKET, "language": language,
         "title": data.get("document_title") or s3_key.split("/")[-1],
         "original_language": language,
         "tags": tags, "regions": regions, "topics": topics, "sections": section_list, **kept})

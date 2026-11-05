@@ -20,7 +20,7 @@ import ui
 # Set it to "" to use the local agent.
 AGENT_ARN = os.environ.get("AGENT_ARN", "arn:aws:bedrock-agentcore:us-east-1:account_id:runtime/askwri_agent-wPm1MF2o63")
 LOCAL_URL = os.environ.get("LOCAL_URL", "http://localhost:8080/invocations")  # used when AGENT_ARN is ""
-REGION = "us-east-1"
+REGION = os.environ.get("AWS_REGION") or boto3.Session().region_name or "us-east-1"
 DOCS_TABLE = "askwri-documents"
 
 MODES = ["ask", "briefing", "gaps"]

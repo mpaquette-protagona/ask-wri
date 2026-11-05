@@ -9,14 +9,14 @@ from botocore.config import Config
 # ---- Constants ----
 SOURCE_BUCKET = "wri-publications"
 PDF_QUEUE = "askwri-pdf-queue"
-REGION = "us-east-1"
-PROFILE = None  # None = default AWS credentials
 
 # Path to the list of PDFs, one folder above this file
 DOCS_FILE = os.path.join(os.path.dirname(__file__), "..", "docs_to_ingest.txt")
 
 # ---- AWS session and clients ----
-session = boto3.Session(profile_name=PROFILE, region_name=REGION)
+# No profile is named here: boto3 uses your AWS_PROFILE or your login's credentials.
+# The region comes from AWS_REGION (which boto3 ignores by itself), AWS_DEFAULT_REGION or your profile.
+session = boto3.Session(region_name=os.environ.get("AWS_REGION"))
 BOTO_CONFIG = Config(read_timeout=600, retries={"max_attempts": 10, "mode": "adaptive"})
 
 s3 = session.client("s3", config=BOTO_CONFIG)

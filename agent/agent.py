@@ -3,6 +3,7 @@ They find WRI sections with a search tool (semantic search plus metadata filters
 Runs on AgentCore Runtime.
 """
 import json
+import os
 import re
 import threading
 import time
@@ -19,7 +20,10 @@ from labels import REGIONS, TAGS, TOPICS
 from passages import cited_numbers, excerpt, locate_quote, parse_quotes, split_answer
 
 # ---- Constants ----
-REGION = "us-east-1"
+# Terraform passes the region to the deployed agent in ASKWRI_REGION. On your own computer it falls back
+# to AWS_REGION, then your AWS_DEFAULT_REGION / profile region.
+REGION = (os.environ.get("ASKWRI_REGION") or os.environ.get("AWS_REGION")
+          or boto3.Session().region_name or "us-east-1")
 DOCS_TABLE = "askwri-documents"
 VECTOR_BUCKET = "askwri-vectors"
 VECTOR_INDEX = "askwri-index"

@@ -1,0 +1,176 @@
+{
+  "info": {
+    "run": "20261105_043036-baseline",
+    "label": "baseline",
+    "git": "27959dc-dirty",
+    "model": "us.anthropic.claude-sonnet-5-5",
+    "started": "20261105_043036",
+    "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:<ACCOUNT_ID>:runtime/askwri_agent-ZcRHARAtJj",
+    "questions": [
+      "q01",
+      "q02",
+      "q03",
+      "q04",
+      "q05",
+      "q06",
+      "q07",
+      "q08",
+      "q09",
+      "q10",
+      "q11",
+      "q12",
+      "q13",
+      "q14",
+      "q15",
+      "q16",
+      "q17",
+      "q18",
+      "q19",
+      "q20",
+      "q21",
+      "q22",
+      "q23"
+    ]
+  },
+  "checks": {
+    "recall": {
+      "value": 0.967,
+      "target": ">= 0.75",
+      "pass": true
+    },
+    "max_latency_s": {
+      "value": 66.0,
+      "target": "< 60",
+      "pass": false
+    },
+    "false_declines": {
+      "value": 3,
+      "target": "<= 2 of 15",
+      "pass": false
+    },
+    "declined_correctly": {
+      "value": 5,
+      "target": "5 of 5",
+      "pass": true
+    },
+    "premises_corrected": {
+      "value": 1,
+      "target": "3 of 3",
+      "pass": false
+    }
+  },
+  "by_group": {
+    "qa": {
+      "questions": 9,
+      "mean_latency_s": 22.356,
+      "recall": 0.944,
+      "scores": {
+        "Builtin.Correctness": 0.444,
+        "Builtin.Faithfulness": 0.556,
+        "Builtin.GoalSuccessRate": 0.444,
+        "Builtin.Helpfulness": 0.499,
+        "Builtin.InstructionFollowing": 0.889,
+        "Builtin.Refusal": 0.0,
+        "Builtin.ToolParameterAccuracy": 0.891,
+        "Builtin.ToolSelectionAccuracy": 0.776,
+        "Builtin.TrajectoryAnyOrderMatch": 0.889
+      }
+    },
+    "briefing": {
+      "questions": 3,
+      "mean_latency_s": 52.833,
+      "recall": 1.0,
+      "scores": {
+        "Builtin.Correctness": 0.0,
+        "Builtin.Faithfulness": 0.333,
+        "Builtin.GoalSuccessRate": 0.0,
+        "Builtin.Helpfulness": 0.28,
+        "Builtin.InstructionFollowing": 0.667,
+        "Builtin.Refusal": 0.667,
+        "Builtin.ToolParameterAccuracy": 0.956,
+        "Builtin.ToolSelectionAccuracy": 0.744,
+        "Builtin.TrajectoryAnyOrderMatch": 1.0
+      }
+    },
+    "gap": {
+      "questions": 3,
+      "mean_latency_s": 62.9,
+      "recall": 1.0,
+      "scores": {
+        "Builtin.Correctness": 0.0,
+        "Builtin.Faithfulness": 0.917,
+        "Builtin.GoalSuccessRate": 0.0,
+        "Builtin.Helpfulness": 0.5,
+        "Builtin.InstructionFollowing": 1.0,
+        "Builtin.Refusal": 0.0,
+        "Builtin.ToolParameterAccuracy": 0.904,
+        "Builtin.ToolSelectionAccuracy": 0.834,
+        "Builtin.TrajectoryAnyOrderMatch": 1.0
+      }
+    },
+    "off_topic": {
+      "questions": 2,
+      "mean_latency_s": 10.9,
+      "recall": null,
+      "scores": {
+        "Builtin.GoalSuccessRate": 1.0
+      }
+    },
+    "in_domain_missing": {
+      "questions": 3,
+      "mean_latency_s": 15.567,
+      "recall": null,
+      "scores": {
+        "Builtin.GoalSuccessRate": 1.0
+      }
+    },
+    "false_premise": {
+      "questions": 3,
+      "mean_latency_s": 26.1,
+      "recall": null,
+      "scores": {
+        "Builtin.GoalSuccessRate": 0.333
+      }
+    }
+  },
+  "jobs": {
+    "answerable": {
+      "id": "askwri_answerable_20261105_043036_baseline-db473e54be",
+      "status": "COMPLETED",
+      "submitted": 15,
+      "completed": 15,
+      "failed": 0,
+      "ignored": 0,
+      "evaluator_averages": {
+        "Builtin.InstructionFollowing": 0.87,
+        "Builtin.ToolParameterAccuracy": 0.91,
+        "Builtin.GoalSuccessRate": 0.27,
+        "Builtin.Faithfulness": 0.58,
+        "Builtin.Helpfulness": 0.46,
+        "Builtin.Refusal": 0.13,
+        "Builtin.ToolSelectionAccuracy": 0.74,
+        "Builtin.TrajectoryAnyOrderMatch": 0.93,
+        "Builtin.Correctness": 0.27,
+        "Builtin.FailureAnalysis": 0.6
+      },
+      "error_details": null,
+      "invocation_failures": []
+    },
+    "unanswerable": {
+      "id": "askwri_unanswerable_20261105_043036_baseline-a514b3c8f4",
+      "status": "COMPLETED",
+      "submitted": 8,
+      "completed": 8,
+      "failed": 0,
+      "ignored": 0,
+      "evaluator_averages": {
+        "Builtin.GoalSuccessRate": 0.75,
+        "Builtin.FailureAnalysis": 0.5
+      },
+      "error_details": null,
+      "invocation_failures": []
+    }
+  },
+  "warnings": [],
+  "errors": []
+}

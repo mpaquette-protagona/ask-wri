@@ -1,0 +1,4 @@
+# For the batch evaluation scripts. The batch evaluation SDK is in preview, so the version is pinned:
+# run_batch_eval.py was written against this one.
+bedrock-agentcore==1.25.3
+boto3

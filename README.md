@@ -151,6 +151,7 @@ agent/
   requirements.txt        packages the deployed agent needs
 app/
   streamlit_app.py        the chat page
+evaluation/               tests the deployed agent on 23 questions (see evaluation/README.md)
 .streamlit/
   config.toml             the page's colours and settings
 ```
@@ -219,6 +220,23 @@ It serves on `http://localhost:8080`. Terminal 2: set `USE_LOCAL_AGENT = True` a
 **Language selector:** when the library holds documents in more than one language, a "Search documents in" dropdown appears. Pick a language and every agent only searches, lists and counts documents written in that language (it is applied in code, not left to the model). Answers are always in English, and the PDF you open is the original in its own language. Each document's language is chosen by the model during ingestion from a fixed list in `lambdas/labels.py`.
 
 PDFs open from temporary links that the agent creates (its role is allowed to read the PDF bucket, set up in Terraform), so the person using the page needs no access to that bucket. A link works for up to an hour. If you open a source from an older answer, or a link has stopped working, the page quietly asks the agent for a fresh one (a quick request that doesn't re-answer the question). Anyone who has a link can read that PDF until it expires.
+
+---
+
+## Evaluating the agent
+
+The agent sends its traces to CloudWatch (it starts with `opentelemetry-instrument`), and
+[evaluation/](evaluation/README.md) uses them to score the deployed agent on 23 test questions with
+AgentCore batch evaluation, in about 4.5 minutes:
+
+```
+pip install -r requirements.txt -r evaluation/requirements.txt
+python evaluation/run_batch_eval.py --label my-baseline
+```
+
+New to it? Start with [Your first run](evaluation/README.md#your-first-run-about-10-minutes) in
+evaluation/README.md: it covers the prerequisites, reading the report, the current baseline and
+its findings, and comparing runs.
 
 ---
 

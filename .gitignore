@@ -14,6 +14,8 @@ agent/agent_code.zip
 agent/.bedrock_agentcore/
 agent/.bedrock_agentcore.yaml
 
+# Evaluation runs: full answers, judge output and account ARNs (regenerate with evaluation/run_batch_eval.py)
+evaluation/results/
 # Python
 __pycache__/
 *.pyc

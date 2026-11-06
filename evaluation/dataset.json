@@ -1,0 +1,572 @@
+{
+  "scenarios": [
+    {
+      "scenario_id": "q01",
+      "turns": [
+        {
+          "input": "How much is the 45Q tax credit worth per tonne of CO2 for point-source capture versus direct air capture after the Inflation Reduction Act?",
+          "expected_response": "$50/tonne for dedicated geological storage. $85/tonne for point-source capture. $180/tonne for direct air capture. The 2022 Inflation Reduction Act improved the 45Q tax credits."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-carbon-management-briefing-en"
+        ]
+      },
+      "assertions": [
+        "The answer states: $50/tonne for dedicated geological storage",
+        "The answer states: $85/tonne for point-source capture",
+        "The answer states: $180/tonne for direct air capture",
+        "The answer states: The 2022 Inflation Reduction Act improved the 45Q tax credits"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q02",
+      "turns": [
+        {
+          "input": "What target for cooperative CCUS projects did the U.S. and China commit to in the Sunnylands Statement?",
+          "expected_response": "At least five large-scale cooperative CCUS projects each. By 2030. Including carbon capture from industrial and energy sources."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-carbon-management-briefing-en"
+        ]
+      },
+      "assertions": [
+        "The answer states: At least five large-scale cooperative CCUS projects each",
+        "The answer states: By 2030",
+        "The answer states: Including carbon capture from industrial and energy sources"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q03",
+      "turns": [
+        {
+          "input": "How many hours of Tailored Advice does a CCG membership include each year, and how much did members use in 2024?",
+          "expected_response": "Tailored Advice is limited to 8 hours per membership year. The limit reflects CCG dues being a philanthropic contribution rather than an exchange for service. In 2024, CCG members utilized over 60 hours of Tailored Advice."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-ccg-year-in-review"
+        ]
+      },
+      "assertions": [
+        "The answer states: Tailored Advice is limited to 8 hours per membership year",
+        "The answer states: The limit reflects CCG dues being a philanthropic contribution rather than an exchange for service",
+        "The answer states: In 2024, CCG members utilized over 60 hours of Tailored Advice"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q04",
+      "turns": [
+        {
+          "input": "What were China's total methane emissions in its latest national inventory, and which sources account for most of them?",
+          "expected_response": "The most recent inventory is from 2018. Total methane emissions were 64 million tons, equivalent to 1.4 billion tons of CO2. About half comes from the energy sector, mainly coal mining (over 90% of energy-related methane). About 40% comes from agriculture and 10% from waste."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: The most recent inventory is from 2018",
+        "The answer states: Total methane emissions were 64 million tons, equivalent to 1.4 billion tons of CO2",
+        "The answer states: About half comes from the energy sector, mainly coal mining (over 90% of energy-related methane)",
+        "The answer states: About 40% comes from agriculture and 10% from waste"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q05",
+      "turns": [
+        {
+          "input": "When did Washington State's cap-and-invest program take effect, which emitters does it cover, and how much did its auctions raise in 2023?",
+          "expected_response": "The Climate Commitment Act went into effect on January 1, 2023. It covers industry, energy, and fuel suppliers emitting more than 25,000 tCO2e/year. Auctions raised $1.8 billion in 2023."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-climate-finance-carbon-pricing-briefing-en"
+        ]
+      },
+      "assertions": [
+        "The answer states: The Climate Commitment Act went into effect on January 1, 2023",
+        "The answer states: It covers industry, energy, and fuel suppliers emitting more than 25,000 tCO2e/year",
+        "The answer states: Auctions raised $1.8 billion in 2023"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q06",
+      "turns": [
+        {
+          "input": "When was China's CCER voluntary credit scheme restarted, which project types can currently sell credits, and how much can CCERs be used toward compliance?",
+          "expected_response": "CCER was reactivated in January 2024 after a six-year hiatus. Restricted to four areas: afforestation, solar thermal power, offshore wind power generation and mangrove planting. CCERs can account for up to 5% of extra allowances."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-climate-finance-carbon-pricing-briefing-en"
+        ]
+      },
+      "assertions": [
+        "The answer states: CCER was reactivated in January 2024 after a six-year hiatus",
+        "The answer states: Restricted to four areas: afforestation, solar thermal power, offshore wind power generation and mangrove planting",
+        "The answer states: CCERs can account for up to 5% of extra allowances"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q07",
+      "turns": [
+        {
+          "input": "中国2023年的能源强度出现了怎样的变化？为了实现“十四五”能源强度目标，2024年和2025年每年需要下降多少？",
+          "expected_response": "China's energy intensity increased by 0.5% in 2023, the first annual rise since at least 2005. The 14th Five-Year Plan target is a 13.5% reduction in energy intensity for 2021-2025. From 2020 to 2023 energy intensity only fell 2%. China needs to cut energy intensity by 6% (and carbon intensity by 7%) in both 2024 and 2025."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-energy-efficiency-briefing-en",
+          "2024-energy-efficiency-briefing-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: China's energy intensity increased by 0.5% in 2023, the first annual rise since at least 2005",
+        "The answer states: The 14th Five-Year Plan target is a 13.5% reduction in energy intensity for 2021-2025",
+        "The answer states: From 2020 to 2023 energy intensity only fell 2%",
+        "The answer states: China needs to cut energy intensity by 6% (and carbon intensity by 7%) in both 2024 and 2025"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q08",
+      "turns": [
+        {
+          "input": "How have carbon allowance prices in China's national emissions trading scheme changed since the market launched?",
+          "expected_response": "Prices closed at approximately CNY54.2/tCO2e on December 31, 2021. Prices in 2023 rose over 20% from 2022, reaching CNY79.4/tCO2e on December 29, 2023. Over the compliance periods, prices rose from 48 yuan per ton to over 100 yuan per ton, roughly doubling."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-climate-finance-carbon-pricing-briefing-en",
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: Prices closed at approximately CNY54.2/tCO2e on December 31, 2021",
+        "The answer states: Prices in 2023 rose over 20% from 2022, reaching CNY79.4/tCO2e on December 29, 2023",
+        "The answer states: Over the compliance periods, prices rose from 48 yuan per ton to over 100 yuan per ton, roughly doubling"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q09",
+      "turns": [
+        {
+          "input": "What is the history of the U.S.-China Energy Efficiency Forum, and what did the two countries agree about it in the Sunnylands Statement?",
+          "expected_response": "The forum first convened on May 26, 2010, in Beijing. It was held eight times, with the last one in 2017. It was co-hosted by the U.S. DOE and China's NDRC. The November 2023 Sunnylands Statement agreed to restart the forum."
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-energy-efficiency-briefing-en",
+          "2024-energy-efficiency-briefing-cn",
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: The forum first convened on May 26, 2010, in Beijing",
+        "The answer states: It was held eight times, with the last one in 2017",
+        "The answer states: It was co-hosted by the U.S. DOE and China's NDRC",
+        "The answer states: The November 2023 Sunnylands Statement agreed to restart the forum"
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q10",
+      "turns": [
+        {
+          "input": "Write a briefing on the state of CCUS deployment in the United States and China, including the main barriers to scaling it up.",
+          "expected_response": "The U.S. has 15 operational CCUS facilities (22 Mtpa) and over 120 projects in development. The IIJA allocated about $12 billion across the CCUS value chain. China has over 100 CCUS pilot or demonstration projects, around 60 operational; its first million-ton project (SINOPEC Qilu-Shengli) was commissioned in August 2022. China lacks a comprehensive regulatory framework and a dedicated large-scale CO2 transport network. U.S. challenges include permitting speed and lack of community support in some areas."
+        }
+      ],
+      "metadata": {
+        "journey": "briefing",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-carbon-management-briefing-en",
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: The U.S. has 15 operational CCUS facilities (22 Mtpa) and over 120 projects in development",
+        "The answer states: The IIJA allocated about $12 billion across the CCUS value chain",
+        "The answer states: China has over 100 CCUS pilot or demonstration projects, around 60 operational; its first million-ton project (SINOPEC Qilu-Shengli) was commissioned in August 2022",
+        "The answer states: China lacks a comprehensive regulatory framework and a dedicated large-scale CO2 transport network",
+        "The answer states: U.S. challenges include permitting speed and lack of community support in some areas",
+        "The answer is a briefing with a summary, cited key findings and a list of sources."
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q11",
+      "turns": [
+        {
+          "input": "Write a briefing on carbon pricing in the U.S. and China, covering national and subnational programs.",
+          "expected_response": "The U.S. has no mandatory nationwide carbon pricing mechanism. Thirteen U.S. states with over 25% of the population have carbon-pricing programs; RGGI is the first mandatory U.S. cap-and-trade program. China's ETS, launched in 2021, is the world's largest and covers the power sector. China's ETS uses an intensity-based design with free allocation, unlike the EU ETS absolute cap. China's ETS will gradually add seven other emission-intensive sectors."
+        }
+      ],
+      "metadata": {
+        "journey": "briefing",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-climate-finance-carbon-pricing-briefing-en",
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: The U.S. has no mandatory nationwide carbon pricing mechanism",
+        "The answer states: Thirteen U.S. states with over 25% of the population have carbon-pricing programs; RGGI is the first mandatory U.S. cap-and-trade program",
+        "The answer states: China's ETS, launched in 2021, is the world's largest and covers the power sector",
+        "The answer states: China's ETS uses an intensity-based design with free allocation, unlike the EU ETS absolute cap",
+        "The answer states: China's ETS will gradually add seven other emission-intensive sectors",
+        "The answer is a briefing with a summary, cited key findings and a list of sources."
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q12",
+      "turns": [
+        {
+          "input": "Write a briefing on U.S. and China energy efficiency goals and how each country's track record compares.",
+          "expected_response": "U.S. energy intensity declined 1.6% per year from 1950 to 2022 and 2% per year from 1970 to 2022. China set its first energy intensity goal in the 11th Five-Year Plan: about 20% reduction by 2010 from 2005. The U.S. joined the COP28 pledge to double the annual efficiency improvement rate from about 2% to over 4% by 2030. DOE enforces standards for over 60 categories of appliances and equipment. From 1992 to 2020 the U.S. reduced energy intensity by 2.1 percentage points a year on average and China by 3.2."
+        }
+      ],
+      "metadata": {
+        "journey": "briefing",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-energy-efficiency-briefing-en",
+          "2024-energy-efficiency-briefing-cn",
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: U.S. energy intensity declined 1.6% per year from 1950 to 2022 and 2% per year from 1970 to 2022",
+        "The answer states: China set its first energy intensity goal in the 11th Five-Year Plan: about 20% reduction by 2010 from 2005",
+        "The answer states: The U.S. joined the COP28 pledge to double the annual efficiency improvement rate from about 2% to over 4% by 2030",
+        "The answer states: DOE enforces standards for over 60 categories of appliances and equipment",
+        "The answer states: From 1992 to 2020 the U.S. reduced energy intensity by 2.1 percentage points a year on average and China by 3.2",
+        "The answer is a briefing with a summary, cited key findings and a list of sources."
+      ],
+      "expected_trajectory": [
+        "research_agent",
+        "search_wri"
+      ]
+    },
+    {
+      "scenario_id": "q13",
+      "turns": [
+        {
+          "input": "Where is WRI's research on carbon dioxide removal thin?",
+          "expected_response": "DOE estimates 400 million to 1.8 billion metric tons of CO2 removal/capture annually by 2050 for U.S. net zero. The China CCS Status Report cites a need for 300 million metric tons of annual CO2 removal between 2050 and 2060. DOE announced up to $1.2 billion for two commercial-scale DAC facilities in Texas and Louisiana. Direct burial of sustainable biomass may be the most cost-effective biomass carbon removal approach at present. Open research questions remain on DAC integration with renewables, R&D needs, and policy frameworks for CDR."
+        }
+      ],
+      "metadata": {
+        "journey": "gap",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-carbon-management-briefing-en"
+        ]
+      },
+      "assertions": [
+        "The answer states: DOE estimates 400 million to 1.8 billion metric tons of CO2 removal/capture annually by 2050 for U.S. net zero",
+        "The answer states: The China CCS Status Report cites a need for 300 million metric tons of annual CO2 removal between 2050 and 2060",
+        "The answer states: DOE announced up to $1.2 billion for two commercial-scale DAC facilities in Texas and Louisiana",
+        "The answer states: Direct burial of sustainable biomass may be the most cost-effective biomass carbon removal approach at present",
+        "The answer states: Open research questions remain on DAC integration with renewables, R&D needs, and policy frameworks for CDR",
+        "The answer names specific areas where WRI's research on the topic is thin or missing."
+      ],
+      "expected_trajectory": [
+        "gaps_agent",
+        "list_documents"
+      ]
+    },
+    {
+      "scenario_id": "q14",
+      "turns": [
+        {
+          "input": "Where are the gaps in WRI's research on methane emissions reduction in China and the U.S.?",
+          "expected_response": "In China coal accounts for 36% of anthropogenic methane and oil and gas 6%; in the U.S. coal is 6% and oil and gas 42%. China's methane reduction plan is expected to cut emissions 20% below baseline by 2030. EPA rules are expected to reduce methane emissions by an estimated 80%. Data inconsistencies across institutions on China's methane emissions are a key concern. Demand-side behavioral change in agriculture has received less attention than supply-side measures."
+        }
+      ],
+      "metadata": {
+        "journey": "gap",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: In China coal accounts for 36% of anthropogenic methane and oil and gas 6%; in the U.S. coal is 6% and oil and gas 42%",
+        "The answer states: China's methane reduction plan is expected to cut emissions 20% below baseline by 2030",
+        "The answer states: EPA rules are expected to reduce methane emissions by an estimated 80%",
+        "The answer states: Data inconsistencies across institutions on China's methane emissions are a key concern",
+        "The answer states: Demand-side behavioral change in agriculture has received less attention than supply-side measures",
+        "The answer names specific areas where WRI's research on the topic is thin or missing."
+      ],
+      "expected_trajectory": [
+        "gaps_agent",
+        "list_documents"
+      ]
+    },
+    {
+      "scenario_id": "q15",
+      "turns": [
+        {
+          "input": "Where is WRI's research on corporate climate disclosure thin?",
+          "expected_response": "The SEC finalized a climate disclosure rule in March 2024 requiring Scope 1 and 2 but dropped Scope 3. A federal court stayed the SEC rule the same month it was released. California's SB 253 and SB 261 mandate climate disclosures, taking effect in 2026. China's three stock exchanges released a draft guideline in February 2024 requiring over 400 listed companies to disclose. Differing disclosure requirements burden companies operating across jurisdictions."
+        }
+      ],
+      "metadata": {
+        "journey": "gap",
+        "answerable": true,
+        "unanswerable_type": null,
+        "expected_doc_ids": [
+          "2024-climate-finance-carbon-pricing-briefing-en",
+          "2024-china-us-dialogue-summary-cn"
+        ]
+      },
+      "assertions": [
+        "The answer states: The SEC finalized a climate disclosure rule in March 2024 requiring Scope 1 and 2 but dropped Scope 3",
+        "The answer states: A federal court stayed the SEC rule the same month it was released",
+        "The answer states: California's SB 253 and SB 261 mandate climate disclosures, taking effect in 2026",
+        "The answer states: China's three stock exchanges released a draft guideline in February 2024 requiring over 400 listed companies to disclose",
+        "The answer states: Differing disclosure requirements burden companies operating across jurisdictions",
+        "The answer names specific areas where WRI's research on the topic is thin or missing."
+      ],
+      "expected_trajectory": [
+        "gaps_agent",
+        "list_documents"
+      ]
+    },
+    {
+      "scenario_id": "q16",
+      "turns": [
+        {
+          "input": "What's a good 12-week training plan for running my first marathon?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "off_topic",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent says the WRI documents it has access to don't cover this question.",
+        "The agent doesn't answer from outside knowledge and doesn't invent figures or findings."
+      ]
+    },
+    {
+      "scenario_id": "q17",
+      "turns": [
+        {
+          "input": "How much has ocean acidification reduced shellfish fishery yields along the U.S. Pacific coast, according to WRI's analysis?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "in_domain_missing",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent says the WRI documents it has access to don't cover this question.",
+        "The agent doesn't answer from outside knowledge and doesn't invent figures or findings."
+      ]
+    },
+    {
+      "scenario_id": "q18",
+      "turns": [
+        {
+          "input": "Why did WRI's carbon management briefing recommend that the U.S. phase out the 45Q tax credit for CCUS projects?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "false_premise",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent points out that the question's premise is wrong.",
+        "The agent states the correct fact from the WRI documents: The briefing makes no such recommendation: it says the 2022 Inflation Reduction Act improved the 45Q tax credits for CCUS projects, further incentivizing private investment.",
+        "The agent doesn't explain or justify the false premise as if it were true."
+      ]
+    },
+    {
+      "scenario_id": "q19",
+      "turns": [
+        {
+          "input": "Can you write a Python function that sorts a list of dictionaries by one of their keys?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "off_topic",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent says the WRI documents it has access to don't cover this question.",
+        "The agent doesn't answer from outside knowledge and doesn't invent figures or findings."
+      ]
+    },
+    {
+      "scenario_id": "q20",
+      "turns": [
+        {
+          "input": "How much has the annual deforestation rate in the Brazilian Amazon changed since 2020, according to WRI's data?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "in_domain_missing",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent says the WRI documents it has access to don't cover this question.",
+        "The agent doesn't answer from outside knowledge and doesn't invent figures or findings."
+      ]
+    },
+    {
+      "scenario_id": "q21",
+      "turns": [
+        {
+          "input": "How much freshwater do thermal power plants in India withdraw each year, according to WRI's research?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "in_domain_missing",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent says the WRI documents it has access to don't cover this question.",
+        "The agent doesn't answer from outside knowledge and doesn't invent figures or findings."
+      ]
+    },
+    {
+      "scenario_id": "q22",
+      "turns": [
+        {
+          "input": "Why did China's energy intensity fall by more than 5% in 2023?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "false_premise",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent points out that the question's premise is wrong.",
+        "The agent states the correct fact from the WRI documents: China's energy intensity rose 0.5% in 2023, the first annual increase since at least 2005.",
+        "The agent doesn't explain or justify the false premise as if it were true."
+      ]
+    },
+    {
+      "scenario_id": "q23",
+      "turns": [
+        {
+          "input": "Why did the U.S. and China agree in the Sunnylands Statement to end their cooperation on CCUS?"
+        }
+      ],
+      "metadata": {
+        "journey": "qa",
+        "answerable": false,
+        "unanswerable_type": "false_premise",
+        "expected_doc_ids": []
+      },
+      "assertions": [
+        "The agent points out that the question's premise is wrong.",
+        "The agent states the correct fact from the WRI documents: The Sunnylands Statement did the opposite: the U.S. and China aim to advance at least five large-scale cooperative CCUS projects each by 2030.",
+        "The agent doesn't explain or justify the false premise as if it were true."
+      ]
+    }
+  ]
+}

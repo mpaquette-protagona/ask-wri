@@ -86,8 +86,9 @@ resource "aws_iam_role_policy" "agent" {
         Resource = "*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "cloudwatch:PutMetricData"]
+        Effect = "Allow"
+        Action = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules",
+        "xray:GetSamplingTargets", "cloudwatch:PutMetricData"]
         Resource = "*"
       },
     ]
@@ -100,14 +101,17 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
   role_arn           = aws_iam_role.agent.arn
   depends_on         = [aws_iam_role_policy.agent]
 
-  # Tell the agent which region it runs in (agent.py reads this)
   environment_variables = {
+    # Tell the agent which region it runs in (agent.py reads this)
     ASKWRI_REGION = data.aws_region.current.region
+    # Keep prompt and answer text on the trace spans: the evaluators score that text
+    AWS_GENAI_CONTENT_EXTRACTION_OPT_OUT = "true"
   }
 
   agent_runtime_artifact {
     code_configuration {
-      entry_point = ["agent.py"]
+      # opentelemetry-instrument starts agent.py with tracing on (traces go to CloudWatch)
+      entry_point = ["opentelemetry-instrument", "agent.py"]
       runtime     = "PYTHON_3_12"
       code {
         s3 {
